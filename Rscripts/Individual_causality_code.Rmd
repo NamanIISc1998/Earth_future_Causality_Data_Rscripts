@@ -1,0 +1,4458 @@
+---
+title: "Individual Causality Bayes Factor Calculation"
+author: "Naman Kishan Rastogi"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
+#########################################################################################################################################
+################################################**individual causality indices based**###################################################
+#########################################################################################################################################
+
+**extract eastern and western precipitation sum**
+```{r}
+library(dplyr)
+library(lubridate)
+library(readr)
+
+# ------------------------------------------------------------
+# FILE
+# ------------------------------------------------------------
+infile <- "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/precipitation_eastern_92.csv"
+outfile <- "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/precipitation_eastern_92_seasonal_totals.csv"
+
+# ------------------------------------------------------------
+# READ
+# ------------------------------------------------------------
+uu <- read.csv(infile, stringsAsFactors = FALSE, check.names = FALSE)
+
+# parse date
+uu$Dates <- mdy(uu$Dates)
+
+# ------------------------------------------------------------
+# If "Sum" already exists and is the daily basin total, use it.
+# Otherwise compute row sum across all grid columns except Dates.
+# ------------------------------------------------------------
+if ("Sum" %in% names(uu)) {
+  uu$DailyTotal <- as.numeric(uu$Sum)
+} else {
+  value_cols <- setdiff(names(uu), "Dates")
+  uu$DailyTotal <- rowSums(uu[, value_cols], na.rm = TRUE)
+}
+
+# ------------------------------------------------------------
+# YEAR / MONTH / SEASON
+# Early   = May + June
+# Peak    = July + August
+# Late    = September + October
+# Monsoon = JJAS = June + July + August + September
+# ------------------------------------------------------------
+uu <- uu %>%
+  mutate(
+    Year  = year(Dates),
+    Month = month(Dates)
+  )
+
+# seasonal totals by year
+early_df <- uu %>%
+  filter(Month %in% c(5, 6)) %>%
+  group_by(Year) %>%
+  summarise(Early = sum(DailyTotal, na.rm = TRUE), .groups = "drop")
+
+peak_df <- uu %>%
+  filter(Month %in% c(7, 8)) %>%
+  group_by(Year) %>%
+  summarise(Peak = sum(DailyTotal, na.rm = TRUE), .groups = "drop")
+
+late_df <- uu %>%
+  filter(Month %in% c(9, 10)) %>%
+  group_by(Year) %>%
+  summarise(Late = sum(DailyTotal, na.rm = TRUE), .groups = "drop")
+
+monsoon_df <- uu %>%
+  filter(Month %in% c(6, 7, 8, 9)) %>%
+  group_by(Year) %>%
+  summarise(Monsoon = sum(DailyTotal, na.rm = TRUE), .groups = "drop")
+
+# ------------------------------------------------------------
+# FINAL OUTPUT
+# ------------------------------------------------------------
+final_df <- early_df %>%
+  full_join(peak_df, by = "Year") %>%
+  full_join(late_df, by = "Year") %>%
+  full_join(monsoon_df, by = "Year") %>%
+  arrange(Year)
+
+print(final_df)
+
+write.csv(final_df, outfile, row.names = FALSE)
+cat("Saved:", outfile, "\n")
+```
+
+```{r}
+library(dplyr)
+library(lubridate)
+library(readr)
+
+# ------------------------------------------------------------
+# FILE
+# ------------------------------------------------------------
+infile <- "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/precipitation_western_92.csv"
+outfile <- "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/precipitation_western_92_seasonal_totals.csv"
+
+# ------------------------------------------------------------
+# READ
+# ------------------------------------------------------------
+uu <- read.csv(infile, stringsAsFactors = FALSE, check.names = FALSE)
+
+# parse date
+uu$Dates <- mdy(uu$Dates)
+
+# ------------------------------------------------------------
+# If "Sum" already exists and is the daily basin total, use it.
+# Otherwise compute row sum across all grid columns except Dates.
+# ------------------------------------------------------------
+if ("Sum" %in% names(uu)) {
+  uu$DailyTotal <- as.numeric(uu$Sum)
+} else {
+  value_cols <- setdiff(names(uu), "Dates")
+  uu$DailyTotal <- rowSums(uu[, value_cols], na.rm = TRUE)
+}
+
+# ------------------------------------------------------------
+# YEAR / MONTH / SEASON
+# Early   = May + June
+# Peak    = July + August
+# Late    = September + October
+# Monsoon = JJAS = June + July + August + September
+# ------------------------------------------------------------
+uu <- uu %>%
+  mutate(
+    Year  = year(Dates),
+    Month = month(Dates)
+  )
+
+# seasonal totals by year
+early_df <- uu %>%
+  filter(Month %in% c(5, 6)) %>%
+  group_by(Year) %>%
+  summarise(Early = sum(DailyTotal, na.rm = TRUE), .groups = "drop")
+
+peak_df <- uu %>%
+  filter(Month %in% c(7, 8)) %>%
+  group_by(Year) %>%
+  summarise(Peak = sum(DailyTotal, na.rm = TRUE), .groups = "drop")
+
+late_df <- uu %>%
+  filter(Month %in% c(9, 10)) %>%
+  group_by(Year) %>%
+  summarise(Late = sum(DailyTotal, na.rm = TRUE), .groups = "drop")
+
+monsoon_df <- uu %>%
+  filter(Month %in% c(6, 7, 8, 9)) %>%
+  group_by(Year) %>%
+  summarise(Monsoon = sum(DailyTotal, na.rm = TRUE), .groups = "drop")
+
+# ------------------------------------------------------------
+# FINAL OUTPUT
+# ------------------------------------------------------------
+final_df <- early_df %>%
+  full_join(peak_df, by = "Year") %>%
+  full_join(late_df, by = "Year") %>%
+  full_join(monsoon_df, by = "Year") %>%
+  arrange(Year)
+
+print(final_df)
+
+write.csv(final_df, outfile, row.names = FALSE)
+cat("Saved:", outfile, "\n")
+```
+
+
+**BAYES FACTOR ANALYSIS**
+**Load Required Libraries**
+
+```{r}
+set.seed(123) 
+rm(list = ls(all=TRUE))  
+library(tidyverse) 
+library(lubridate)  
+library(bnlearn)  
+```
+
+**CONVERT DATA INTO NORMAL QUANTILES**
+```{r}
+NQ <- function(datain){
+  emp.cdf <- ecdf(datain)
+  ecdf.prob <- emp.cdf(datain)
+  max_datain <- max(datain) 
+  val_range <- max(datain)-min(datain) 
+  #maxrow <- which.max(datain) # row corresponding to max data
+  maxrow <- which(datain == max_datain) 
+  datain[maxrow]=-Inf
+  
+  second_max <- max(datain) 
+  diff <- max_datain - second_max 
+  second_max_prob <- max(ecdf.prob[ecdf.prob<1]) 
+  adj_prob <- second_max_prob + (diff/val_range)*(1-second_max_prob)  
+  
+
+  ecdf.prob[maxrow] <- adj_prob
+  
+  norm.quantiles <- qnorm(ecdf.prob,mean = 0, sd = 1)
+  return(norm.quantiles)
+}
+
+
+NQ_median.flow <- function(datain,median.flow){
+  if (median.flow>max(datain)){
+    return(2)
+  }
+  else{
+    datain<- c(datain,median.flow)
+    quantiles <- NQ(datain)
+    norm.quantile <- quantiles[length(quantiles)]
+    return(norm.quantile)
+  }
+}
+
+```
+
+**Estimate Truncated Normal Parameters**
+```{r}
+estimate_truncated_normal_parameters <- function(nmean, nsd, upper, lower){
+  a <- (lower-nmean)/nsd
+  b <- (upper-nmean)/nsd
+  trunc.mean = nmean + ((dnorm(a)-dnorm(b))/(pnorm(b)-pnorm(a)))*nsd
+  if (b==Inf){
+    term1 = (a*dnorm(a))/(pnorm(b)-pnorm(a))
+  }
+  if (a==-Inf){
+    term1 <- -1*(b*dnorm(b))/(pnorm(b)-pnorm(a))
+  }
+  #term1 <- (b*dnorm(b))/(pnorm(b)-pnorm(a)) + (-a*dnorm(a))/(pnorm(b)-pnorm(a))
+  term2 <- -1*((dnorm(b)-dnorm(a))/(pnorm(b)-pnorm(a)))**2
+  trunc.sd = sqrt(nsd**2 * (1+term1+term2))
+  return(list(mean = trunc.mean, sd = trunc.sd))
+}
+```
+
+
+
+**Define Bayesian Network Structure**
+```{r}
+dag <- model2network("[WP][EP][N12][N3][N4][MJO][DMI][Q|WP:EP:N12:N3:N4:MJO:DMI]")
+print(dag)
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Indi_Causality_Data/Early")
+
+
+png("Bayesian_Network_DAG.png", width = 1000, height = 800)
+
+
+plot(dag, 
+     main = "Bayesian Network DAG",  
+     sub = "Causal Relationships Between Variables",
+     col = "black",  
+     lwd = 2,  
+     cex.main = 1.5,  
+     cex.sub = 1.2,  
+     cex = 1.3,  
+     mar = c(5, 5, 5, 5))  
+
+
+dev.off()
+
+print("Bayesian Network DAG saved as 'Bayesian_Network_DAG.png' with improved visibility")
+
+```
+
+**CONVERT DATA INTO NORMAL QUANTILES**
+
+```{r}
+library(dplyr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Indi_Causality_Data/Early")
+
+df <- read.csv("Early_Causal_Inf.csv", stringsAsFactors = FALSE)
+
+convert_to_normal_quantiles <- function(column) {
+  if (is.numeric(column)) {
+    return(qnorm(rank(column, na.last = "keep") / (sum(!is.na(column)) + 1)))
+  } else {
+    return(column)  
+  }
+}
+
+df_transformed <- df %>%
+  mutate(across(where(is.numeric), convert_to_normal_quantiles))
+
+quantiles_70 <- sapply(df_transformed, function(x) if(is.numeric(x)) quantile(x, probs = 0.7, na.rm = TRUE) else NA)
+quantiles_30 <- sapply(df_transformed, function(x) if(is.numeric(x)) quantile(x, probs = 0.3, na.rm = TRUE) else NA)
+
+quantiles_df <- data.frame(
+  Column = names(df_transformed),
+  Quantile_70th = quantiles_70,
+  Quantile_30th = quantiles_30
+)
+
+print(quantiles_df)
+
+output_filename <- "NQ_Causality_Combined_data.csv"
+write.csv(df_transformed, output_filename, row.names = FALSE)
+
+
+
+library(dplyr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Indi_Causality_Data/Peak/")
+
+df <- read.csv("Peak_Causal_Inf.csv", stringsAsFactors = FALSE)
+
+convert_to_normal_quantiles <- function(column) {
+  if (is.numeric(column)) {
+    return(qnorm(rank(column, na.last = "keep") / (sum(!is.na(column)) + 1)))
+  } else {
+    return(column)  
+  }
+}
+
+df_transformed <- df %>%
+  mutate(across(where(is.numeric), convert_to_normal_quantiles))
+
+quantiles_70 <- sapply(df_transformed, function(x) if(is.numeric(x)) quantile(x, probs = 0.7, na.rm = TRUE) else NA)
+quantiles_30 <- sapply(df_transformed, function(x) if(is.numeric(x)) quantile(x, probs = 0.3, na.rm = TRUE) else NA)
+
+quantiles_df <- data.frame(
+  Column = names(df_transformed),
+  Quantile_70th = quantiles_70,
+  Quantile_30th = quantiles_30
+)
+
+print(quantiles_df)
+
+output_filename <- "NQ_Causality_Combined_data.csv"
+write.csv(df_transformed, output_filename, row.names = FALSE)
+
+
+
+
+
+
+library(dplyr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Indi_Causality_Data/Late")
+
+df <- read.csv("Late_Causal_Inf.csv", stringsAsFactors = FALSE)
+
+convert_to_normal_quantiles <- function(column) {
+  if (is.numeric(column)) {
+    return(qnorm(rank(column, na.last = "keep") / (sum(!is.na(column)) + 1)))
+  } else {
+    return(column)  
+  }
+}
+
+df_transformed <- df %>%
+  mutate(across(where(is.numeric), convert_to_normal_quantiles))
+
+quantiles_70 <- sapply(df_transformed, function(x) if(is.numeric(x)) quantile(x, probs = 0.7, na.rm = TRUE) else NA)
+quantiles_30 <- sapply(df_transformed, function(x) if(is.numeric(x)) quantile(x, probs = 0.3, na.rm = TRUE) else NA)
+
+quantiles_df <- data.frame(
+  Column = names(df_transformed),
+  Quantile_70th = quantiles_70,
+  Quantile_30th = quantiles_30
+)
+
+print(quantiles_df)
+
+output_filename <- "NQ_Causality_Combined_data.csv"
+write.csv(df_transformed, output_filename, row.names = FALSE)
+
+
+
+library(dplyr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Indi_Causality_Data/Monsoon/")
+
+df <- read.csv("Monsoon_Causal_Inf.csv", stringsAsFactors = FALSE)
+
+convert_to_normal_quantiles <- function(column) {
+  if (is.numeric(column)) {
+    return(qnorm(rank(column, na.last = "keep") / (sum(!is.na(column)) + 1)))
+  } else {
+    return(column)  
+  }
+}
+
+df_transformed <- df %>%
+  mutate(across(where(is.numeric), convert_to_normal_quantiles))
+
+quantiles_70 <- sapply(df_transformed, function(x) if(is.numeric(x)) quantile(x, probs = 0.7, na.rm = TRUE) else NA)
+quantiles_30 <- sapply(df_transformed, function(x) if(is.numeric(x)) quantile(x, probs = 0.3, na.rm = TRUE) else NA)
+
+quantiles_df <- data.frame(
+  Column = names(df_transformed),
+  Quantile_70th = quantiles_70,
+  Quantile_30th = quantiles_30
+)
+
+print(quantiles_df)
+
+output_filename <- "NQ_Causality_Combined_data.csv"
+write.csv(df_transformed, output_filename, row.names = FALSE)
+
+
+
+```
+
+
+
+**all indices togther and plot for Bayes Factor DRY, WET AND NORMAL**
+
+###################**Early**################################
+```{r}
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Indi_Causality_Data/Early/")
+data.Q = read.csv('NQ_Causality_Combined_data.csv')
+
+
+check.DJF = 0.4912692	
+
+model <- bn.fit(dag,data.Q)
+joint = gbn2mvnorm(model)
+
+
+
+
+mutEP = mutilated(model, evidence=list(EP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],-1,-Inf)
+
+mutEP$EP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutEP,event = (Q>=check.DJF),evidence = (EP>0))
+}
+mutEP$EP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutEP,event = (Q>=check.DJF),evidence = (EP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat1 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat1 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Eastern Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot1 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for Eastern Precipitation") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutN12 = mutilated(model, evidence=list(N12 = 0))
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],-1,-Inf)
+
+mutN12$N12 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN12,event = (Q>=check.DJF),evidence = (N12>0))
+}
+mutN12$N12 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN12,event = (Q>=check.DJF),evidence = (N12<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat2 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat2 <- rbind(stat2,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Nino12'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot2 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO12") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutN3 = mutilated(model, evidence=list(N3 = 0))
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],-1,-Inf)
+
+mutN3$N3 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN3,event = (Q>=check.DJF),evidence = (N3>0))
+}
+mutN3$N3 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN3,event = (Q>=check.DJF),evidence = (N3<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat3 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat3 <- rbind(stat3,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO3'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot3 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO3") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+##Nino4
+mutN4 = mutilated(model, evidence=list(N4 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],-1,-Inf)
+
+mutN4$N4 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN4,event = (Q>=check.DJF),evidence = (N4>0))
+}
+mutN4$N4 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN4,event = (Q>=check.DJF),evidence = (N4<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat4 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat4 <- rbind(stat4,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO4'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot4 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO4") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutWP = mutilated(model, evidence=list(WP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],-1,-Inf)
+
+mutWP$WP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutWP,event = (Q>=check.DJF),evidence = (WP>0))
+}
+mutWP$WP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutWP,event = (Q>=check.DJF),evidence = (WP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat5 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat5 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Western Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot5 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+
+##MJO
+
+mutMJO = mutilated(model, evidence=list(MJO = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],-1,-Inf)
+
+mutMJO$MJO = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutMJO,event = (Q>=check.DJF),evidence = (MJO>0))
+}
+mutMJO$MJO = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutMJO,event = (Q>=check.DJF),evidence = (MJO<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat6 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat6 <- rbind(stat6,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'MJO'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot6 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutDMI = mutilated(model, evidence=list(DMI = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],-1,-Inf)
+
+mutDMI$DMI = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutDMI,event = (Q>=check.DJF),evidence = (DMI>0))
+}
+mutDMI$DMI = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutDMI,event = (Q>=check.DJF),evidence = (DMI<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat7 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat7 <- rbind(stat7,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'DMI'))
+
+
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot7 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for DMI") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+combined_stat <- rbind(stat1, stat2, stat3, stat4, stat5, stat6, stat7)
+
+write.csv(combined_stat, "wet_Model1_Merged_Bayes_Factor.csv", row.names = FALSE)
+
+print("Merged data has been successfully written to 'Merged_Bayes_Factor_Results.csv'")
+
+library(gridExtra)
+library(grid)
+
+plot_list <- lapply(list(Plot1, Plot2, Plot3, Plot4,Plot5, Plot6, Plot7), function(p) {
+  grid.grabExpr(print(p))
+})
+
+png("Wet_Bayes_factor_Box_plot.png", width = 1200, height = 1200, res = 150)
+grid.arrange(grobs = plot_list, ncol = 3, nrow = 3)
+dev.off()
+
+
+library(ggplot2)
+
+data <- read.csv("wet_Model1_Merged_Bayes_Factor.csv")
+
+
+color_scale <- scale_fill_gradient(low = "skyblue", high = "darkblue")
+
+p <- ggplot(data, aes(x = variable, y = Bayes.factor, fill = Bayes.factor)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.3f", Bayes.factor)), vjust = -0.5, size = 5) +
+  theme_minimal(base_size = 14) +
+  color_scale +
+  labs(title = "Bayes Factor Variation with Different Covariates", 
+       x = "Covariate", y = "Log10 Bayes Factor") +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.background = element_rect(fill = "white"),
+    legend.key = element_rect(fill = "white"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_y_continuous(breaks = seq(floor(min(data$Bayes.factor)), ceiling(max(data$Bayes.factor)), by = 0.25))
+
+ggsave("wet_Bayes_Factor_Variation.png", plot = p, width = 10, height = 7.5, dpi = 300)
+
+print("Bayes factor variation plot saved as 'Bayes_Factor_Variation.png'")
+
+
+
+
+
+
+
+############################ dRY ###########################################
+
+
+
+
+check.DJF = -0.4912692	
+
+model <- bn.fit(dag,data.Q)
+joint = gbn2mvnorm(model)
+
+
+
+
+mutEP = mutilated(model, evidence=list(EP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],-1,-Inf)
+
+mutEP$EP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutEP,event = (Q<=check.DJF),evidence = (EP>0))
+}
+mutEP$EP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutEP,event = (Q<=check.DJF),evidence = (EP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat1 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat1 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Eastern Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot1 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for Eastern Precipitation") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+##Nino12
+mutN12 = mutilated(model, evidence=list(N12 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],-1,-Inf)
+
+# lower tail truncation
+mutN12$N12 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN12,event = (Q<=check.DJF),evidence = (N12>0))
+}
+mutN12$N12 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN12,event = (Q<=check.DJF),evidence = (N12<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat2 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat2 <- rbind(stat2,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Nino12'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot2 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO12") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+##Nino3
+
+mutN3 = mutilated(model, evidence=list(N3 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],-1,-Inf)
+
+mutN3$N3 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN3,event = (Q<=check.DJF),evidence = (N3>0))
+}
+mutN3$N3 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN3,event = (Q<=check.DJF),evidence = (N3<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat3 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat3 <- rbind(stat3,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO3'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot3 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO3") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+##Nino4
+mutN4 = mutilated(model, evidence=list(N4 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],-1,-Inf)
+
+mutN4$N4 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN4,event = (Q<=check.DJF),evidence = (N4>0))
+}
+mutN4$N4 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN4,event = (Q<=check.DJF),evidence = (N4<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat4 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat4 <- rbind(stat4,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO4'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot4 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO4") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutWP = mutilated(model, evidence=list(WP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],-1,-Inf)
+
+mutWP$WP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutWP,event = (Q<=check.DJF),evidence = (WP>0))
+}
+mutWP$WP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutWP,event = (Q<=check.DJF),evidence = (WP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat5 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat5 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Western Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot5 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+
+##MJO
+
+mutMJO = mutilated(model, evidence=list(MJO = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],-1,-Inf)
+
+mutMJO$MJO = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutMJO,event = (Q<=check.DJF),evidence = (MJO>0))
+}
+mutMJO$MJO = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutMJO,event = (Q<=check.DJF),evidence = (MJO<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat6 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat6 <- rbind(stat6,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'MJO'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot6 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutDMI = mutilated(model, evidence=list(DMI = 0)) 
+# parameters of truncated distribution
+param.lower <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],-1,-Inf)
+
+mutDMI$DMI = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutDMI,event = (Q<=check.DJF),evidence = (DMI>0))
+}
+mutDMI$DMI = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutDMI,event = (Q<=check.DJF),evidence = (DMI<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat7 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat7 <- rbind(stat7,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'DMI'))
+
+
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot7 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for DMI") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+combined_stat <- rbind(stat1, stat2, stat3, stat4, stat5, stat6, stat7)
+
+# Write the merged data frame to a CSV file
+write.csv(combined_stat, "wet_Model1_Merged_Bayes_Factor.csv", row.names = FALSE)
+
+print("Merged data has been successfully written to 'Merged_Bayes_Factor_Results.csv'")
+
+library(gridExtra)
+library(grid)
+
+plot_list <- lapply(list(Plot1, Plot2, Plot3, Plot4,Plot5, Plot6, Plot7), function(p) {
+  grid.grabExpr(print(p))
+})
+
+png("Dry_Bayes_factor_Box_plot.png", width = 1200, height = 1200, res = 150)
+grid.arrange(grobs = plot_list, ncol = 3, nrow = 3)
+dev.off()
+
+
+library(ggplot2)
+
+data <- read.csv("wet_Model1_Merged_Bayes_Factor.csv")
+
+color_scale <- scale_fill_gradient(low = "skyblue", high = "darkblue")
+
+p <- ggplot(data, aes(x = variable, y = Bayes.factor, fill = Bayes.factor)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.3f", Bayes.factor)), vjust = -0.5, size = 5) +
+  theme_minimal(base_size = 14) +
+  color_scale +
+  labs(title = "Bayes Factor Variation with Different Covariates", 
+       x = "Covariate", y = "Log10 Bayes Factor") +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.background = element_rect(fill = "white"),
+    legend.key = element_rect(fill = "white"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_y_continuous(breaks = seq(floor(min(data$Bayes.factor)), ceiling(max(data$Bayes.factor)), by = 0.25))
+
+ggsave("dry_Bayes_Factor_Variation.png", plot = p, width = 10, height = 7.5, dpi = 300)
+
+print("Bayes factor variation plot saved as 'Bayes_Factor_Variation.png'")
+
+
+
+
+
+
+
+############################ Normal ###########################################
+
+check.DJF.wet <- 0.4912692
+check.DJF.dry <- -0.4912692
+
+model <- bn.fit(dag,data.Q)
+joint = gbn2mvnorm(model)
+
+
+
+
+mutEP = mutilated(model, evidence=list(EP = 0)) # placeholder value, will be replaced in the next command
+# Parameters of truncated distribution
+param.lower <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],-1,-Inf)
+
+mutEP$EP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutEP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (EP>0))
+}
+mutEP$EP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutEP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (EP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat1 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat1 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Eastern Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+# Generate the box plot using ggplot2
+Plot1 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for Eastern Precipitation") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutN12 = mutilated(model, evidence=list(N12 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],-1,-Inf)
+
+
+mutN12$N12 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN12,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N12>0))
+}
+mutN12$N12 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN12,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N12<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat2 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat2 <- rbind(stat2,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Nino12'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot2 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO12") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutN3 = mutilated(model, evidence=list(N3 = 0)) # placeholder value, will be replaced in the next command
+# parameters of truncated distribution
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],-1,-Inf)
+
+mutN3$N3 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN3,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N3>0))
+}
+mutN3$N3 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN3,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N3<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat3 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat3 <- rbind(stat3,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO3'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot3 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO3") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutN4 = mutilated(model, evidence=list(N4 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],-1,-Inf)
+
+mutN4$N4 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN4,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N4>0))
+}
+mutN4$N4 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN4,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N4<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat4 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat4 <- rbind(stat4,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO4'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot4 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO4") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutWP = mutilated(model, evidence=list(WP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],-1,-Inf)
+
+mutWP$WP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutWP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (WP>0))
+}
+mutWP$WP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutWP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (WP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat5 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat5 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Western Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot5 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+
+
+mutMJO = mutilated(model, evidence=list(MJO = 0)) # placeholder value, will be replaced in the next command
+param.lower <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],-1,-Inf)
+
+mutMJO$MJO = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutMJO,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (MJO>0))
+}
+mutMJO$MJO = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutMJO,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (MJO<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat6 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat6 <- rbind(stat6,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'MJO'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot6 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutDMI = mutilated(model, evidence=list(DMI = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],-1,-Inf)
+
+mutDMI$DMI = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutDMI,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (DMI>0))
+}
+mutDMI$DMI = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutDMI,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (DMI<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat7 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat7 <- rbind(stat7,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'DMI'))
+
+
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot7 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for DMI") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+combined_stat <- rbind(stat1, stat2, stat3, stat4, stat5, stat6, stat7)
+
+write.csv(combined_stat, "wet_Model1_Merged_Bayes_Factor.csv", row.names = FALSE)
+
+print("Merged data has been successfully written to 'Merged_Bayes_Factor_Results.csv'")
+
+library(gridExtra)
+library(grid)
+
+plot_list <- lapply(list(Plot1, Plot2, Plot3, Plot4,Plot5, Plot6, Plot7), function(p) {
+  grid.grabExpr(print(p))
+})
+
+png("Normal_Bayes_factor_Box_plot.png", width = 1200, height = 1200, res = 150)
+grid.arrange(grobs = plot_list, ncol = 3, nrow = 3)
+dev.off()
+
+
+library(ggplot2)
+
+data <- read.csv("wet_Model1_Merged_Bayes_Factor.csv")
+
+color_scale <- scale_fill_gradient(low = "skyblue", high = "darkblue")
+
+p <- ggplot(data, aes(x = variable, y = Bayes.factor, fill = Bayes.factor)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.3f", Bayes.factor)), vjust = -0.5, size = 5) +
+  theme_minimal(base_size = 14) +
+  color_scale +
+  labs(title = "Bayes Factor Variation with Different Covariates", 
+       x = "Covariate", y = "Log10 Bayes Factor") +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.background = element_rect(fill = "white"),
+    legend.key = element_rect(fill = "white"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_y_continuous(breaks = seq(floor(min(data$Bayes.factor)), ceiling(max(data$Bayes.factor)), by = 0.25))
+
+ggsave("Normal_Bayes_Factor_Variation.png", plot = p, width = 10, height = 7.5, dpi = 300)
+
+print("Bayes factor variation plot saved as 'Bayes_Factor_Variation.png'")
+
+
+```
+
+
+
+
+###################**peak**################################
+```{r}
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Indi_Causality_Data/Peak//")
+data.Q = read.csv('NQ_Causality_Combined_data.csv')
+
+
+check.DJF = 0.4912692	
+
+model <- bn.fit(dag,data.Q)
+joint = gbn2mvnorm(model)
+
+
+
+
+mutEP = mutilated(model, evidence=list(EP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],-1,-Inf)
+
+mutEP$EP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutEP,event = (Q>=check.DJF),evidence = (EP>0))
+}
+mutEP$EP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutEP,event = (Q>=check.DJF),evidence = (EP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat1 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat1 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Eastern Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot1 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for Eastern Precipitation") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutN12 = mutilated(model, evidence=list(N12 = 0))
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],-1,-Inf)
+
+mutN12$N12 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN12,event = (Q>=check.DJF),evidence = (N12>0))
+}
+mutN12$N12 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN12,event = (Q>=check.DJF),evidence = (N12<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat2 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat2 <- rbind(stat2,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Nino12'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot2 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO12") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutN3 = mutilated(model, evidence=list(N3 = 0))
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],-1,-Inf)
+
+mutN3$N3 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN3,event = (Q>=check.DJF),evidence = (N3>0))
+}
+mutN3$N3 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN3,event = (Q>=check.DJF),evidence = (N3<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat3 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat3 <- rbind(stat3,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO3'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot3 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO3") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+##Nino4
+mutN4 = mutilated(model, evidence=list(N4 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],-1,-Inf)
+
+mutN4$N4 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN4,event = (Q>=check.DJF),evidence = (N4>0))
+}
+mutN4$N4 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN4,event = (Q>=check.DJF),evidence = (N4<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat4 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat4 <- rbind(stat4,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO4'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot4 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO4") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutWP = mutilated(model, evidence=list(WP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],-1,-Inf)
+
+mutWP$WP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutWP,event = (Q>=check.DJF),evidence = (WP>0))
+}
+mutWP$WP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutWP,event = (Q>=check.DJF),evidence = (WP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat5 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat5 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Western Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot5 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+
+##MJO
+
+mutMJO = mutilated(model, evidence=list(MJO = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],-1,-Inf)
+
+mutMJO$MJO = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutMJO,event = (Q>=check.DJF),evidence = (MJO>0))
+}
+mutMJO$MJO = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutMJO,event = (Q>=check.DJF),evidence = (MJO<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat6 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat6 <- rbind(stat6,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'MJO'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot6 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutDMI = mutilated(model, evidence=list(DMI = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],-1,-Inf)
+
+mutDMI$DMI = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutDMI,event = (Q>=check.DJF),evidence = (DMI>0))
+}
+mutDMI$DMI = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutDMI,event = (Q>=check.DJF),evidence = (DMI<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat7 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat7 <- rbind(stat7,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'DMI'))
+
+
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot7 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for DMI") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+combined_stat <- rbind(stat1, stat2, stat3, stat4, stat5, stat6, stat7)
+
+write.csv(combined_stat, "wet_Model1_Merged_Bayes_Factor.csv", row.names = FALSE)
+
+print("Merged data has been successfully written to 'Merged_Bayes_Factor_Results.csv'")
+
+library(gridExtra)
+library(grid)
+
+plot_list <- lapply(list(Plot1, Plot2, Plot3, Plot4,Plot5, Plot6, Plot7), function(p) {
+  grid.grabExpr(print(p))
+})
+
+png("Wet_Bayes_factor_Box_plot.png", width = 1200, height = 1200, res = 150)
+grid.arrange(grobs = plot_list, ncol = 3, nrow = 3)
+dev.off()
+
+
+library(ggplot2)
+
+data <- read.csv("wet_Model1_Merged_Bayes_Factor.csv")
+
+
+color_scale <- scale_fill_gradient(low = "skyblue", high = "darkblue")
+
+p <- ggplot(data, aes(x = variable, y = Bayes.factor, fill = Bayes.factor)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.3f", Bayes.factor)), vjust = -0.5, size = 5) +
+  theme_minimal(base_size = 14) +
+  color_scale +
+  labs(title = "Bayes Factor Variation with Different Covariates", 
+       x = "Covariate", y = "Log10 Bayes Factor") +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.background = element_rect(fill = "white"),
+    legend.key = element_rect(fill = "white"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_y_continuous(breaks = seq(floor(min(data$Bayes.factor)), ceiling(max(data$Bayes.factor)), by = 0.25))
+
+ggsave("wet_Bayes_Factor_Variation.png", plot = p, width = 10, height = 7.5, dpi = 300)
+
+print("Bayes factor variation plot saved as 'Bayes_Factor_Variation.png'")
+
+
+
+
+
+
+
+############################ dRY ###########################################
+
+
+
+
+check.DJF = -0.4912692	
+
+model <- bn.fit(dag,data.Q)
+joint = gbn2mvnorm(model)
+
+
+
+
+mutEP = mutilated(model, evidence=list(EP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],-1,-Inf)
+
+mutEP$EP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutEP,event = (Q<=check.DJF),evidence = (EP>0))
+}
+mutEP$EP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutEP,event = (Q<=check.DJF),evidence = (EP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat1 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat1 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Eastern Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot1 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for Eastern Precipitation") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+##Nino12
+mutN12 = mutilated(model, evidence=list(N12 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],-1,-Inf)
+
+# lower tail truncation
+mutN12$N12 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN12,event = (Q<=check.DJF),evidence = (N12>0))
+}
+mutN12$N12 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN12,event = (Q<=check.DJF),evidence = (N12<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat2 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat2 <- rbind(stat2,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Nino12'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot2 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO12") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+##Nino3
+
+mutN3 = mutilated(model, evidence=list(N3 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],-1,-Inf)
+
+mutN3$N3 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN3,event = (Q<=check.DJF),evidence = (N3>0))
+}
+mutN3$N3 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN3,event = (Q<=check.DJF),evidence = (N3<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat3 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat3 <- rbind(stat3,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO3'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot3 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO3") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+##Nino4
+mutN4 = mutilated(model, evidence=list(N4 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],-1,-Inf)
+
+mutN4$N4 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN4,event = (Q<=check.DJF),evidence = (N4>0))
+}
+mutN4$N4 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN4,event = (Q<=check.DJF),evidence = (N4<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat4 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat4 <- rbind(stat4,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO4'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot4 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO4") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutWP = mutilated(model, evidence=list(WP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],-1,-Inf)
+
+mutWP$WP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutWP,event = (Q<=check.DJF),evidence = (WP>0))
+}
+mutWP$WP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutWP,event = (Q<=check.DJF),evidence = (WP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat5 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat5 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Western Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot5 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+
+##MJO
+
+mutMJO = mutilated(model, evidence=list(MJO = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],-1,-Inf)
+
+mutMJO$MJO = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutMJO,event = (Q<=check.DJF),evidence = (MJO>0))
+}
+mutMJO$MJO = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutMJO,event = (Q<=check.DJF),evidence = (MJO<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat6 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat6 <- rbind(stat6,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'MJO'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot6 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutDMI = mutilated(model, evidence=list(DMI = 0)) 
+# parameters of truncated distribution
+param.lower <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],-1,-Inf)
+
+mutDMI$DMI = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutDMI,event = (Q<=check.DJF),evidence = (DMI>0))
+}
+mutDMI$DMI = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutDMI,event = (Q<=check.DJF),evidence = (DMI<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat7 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat7 <- rbind(stat7,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'DMI'))
+
+
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot7 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for DMI") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+combined_stat <- rbind(stat1, stat2, stat3, stat4, stat5, stat6, stat7)
+
+# Write the merged data frame to a CSV file
+write.csv(combined_stat, "wet_Model1_Merged_Bayes_Factor.csv", row.names = FALSE)
+
+print("Merged data has been successfully written to 'Merged_Bayes_Factor_Results.csv'")
+
+library(gridExtra)
+library(grid)
+
+plot_list <- lapply(list(Plot1, Plot2, Plot3, Plot4,Plot5, Plot6, Plot7), function(p) {
+  grid.grabExpr(print(p))
+})
+
+png("Dry_Bayes_factor_Box_plot.png", width = 1200, height = 1200, res = 150)
+grid.arrange(grobs = plot_list, ncol = 3, nrow = 3)
+dev.off()
+
+
+library(ggplot2)
+
+data <- read.csv("wet_Model1_Merged_Bayes_Factor.csv")
+
+color_scale <- scale_fill_gradient(low = "skyblue", high = "darkblue")
+
+p <- ggplot(data, aes(x = variable, y = Bayes.factor, fill = Bayes.factor)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.3f", Bayes.factor)), vjust = -0.5, size = 5) +
+  theme_minimal(base_size = 14) +
+  color_scale +
+  labs(title = "Bayes Factor Variation with Different Covariates", 
+       x = "Covariate", y = "Log10 Bayes Factor") +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.background = element_rect(fill = "white"),
+    legend.key = element_rect(fill = "white"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_y_continuous(breaks = seq(floor(min(data$Bayes.factor)), ceiling(max(data$Bayes.factor)), by = 0.25))
+
+ggsave("dry_Bayes_Factor_Variation.png", plot = p, width = 10, height = 7.5, dpi = 300)
+
+print("Bayes factor variation plot saved as 'Bayes_Factor_Variation.png'")
+
+
+
+
+
+
+
+############################ Normal ###########################################
+
+check.DJF.wet <- 0.4912692
+check.DJF.dry <- -0.4912692
+
+model <- bn.fit(dag,data.Q)
+joint = gbn2mvnorm(model)
+
+
+
+
+mutEP = mutilated(model, evidence=list(EP = 0)) # placeholder value, will be replaced in the next command
+# Parameters of truncated distribution
+param.lower <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],-1,-Inf)
+
+mutEP$EP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutEP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (EP>0))
+}
+mutEP$EP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutEP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (EP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat1 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat1 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Eastern Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+# Generate the box plot using ggplot2
+Plot1 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for Eastern Precipitation") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutN12 = mutilated(model, evidence=list(N12 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],-1,-Inf)
+
+
+mutN12$N12 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN12,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N12>0))
+}
+mutN12$N12 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN12,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N12<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat2 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat2 <- rbind(stat2,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Nino12'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot2 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO12") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutN3 = mutilated(model, evidence=list(N3 = 0)) # placeholder value, will be replaced in the next command
+# parameters of truncated distribution
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],-1,-Inf)
+
+mutN3$N3 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN3,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N3>0))
+}
+mutN3$N3 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN3,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N3<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat3 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat3 <- rbind(stat3,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO3'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot3 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO3") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutN4 = mutilated(model, evidence=list(N4 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],-1,-Inf)
+
+mutN4$N4 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN4,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N4>0))
+}
+mutN4$N4 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN4,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N4<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat4 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat4 <- rbind(stat4,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO4'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot4 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO4") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutWP = mutilated(model, evidence=list(WP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],-1,-Inf)
+
+mutWP$WP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutWP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (WP>0))
+}
+mutWP$WP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutWP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (WP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat5 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat5 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Western Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot5 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+
+
+mutMJO = mutilated(model, evidence=list(MJO = 0)) # placeholder value, will be replaced in the next command
+param.lower <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],-1,-Inf)
+
+mutMJO$MJO = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutMJO,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (MJO>0))
+}
+mutMJO$MJO = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutMJO,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (MJO<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat6 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat6 <- rbind(stat6,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'MJO'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot6 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutDMI = mutilated(model, evidence=list(DMI = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],-1,-Inf)
+
+mutDMI$DMI = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutDMI,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (DMI>0))
+}
+mutDMI$DMI = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutDMI,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (DMI<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat7 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat7 <- rbind(stat7,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'DMI'))
+
+
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot7 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for DMI") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+combined_stat <- rbind(stat1, stat2, stat3, stat4, stat5, stat6, stat7)
+
+write.csv(combined_stat, "wet_Model1_Merged_Bayes_Factor.csv", row.names = FALSE)
+
+print("Merged data has been successfully written to 'Merged_Bayes_Factor_Results.csv'")
+
+library(gridExtra)
+library(grid)
+
+plot_list <- lapply(list(Plot1, Plot2, Plot3, Plot4,Plot5, Plot6, Plot7), function(p) {
+  grid.grabExpr(print(p))
+})
+
+png("Normal_Bayes_factor_Box_plot.png", width = 1200, height = 1200, res = 150)
+grid.arrange(grobs = plot_list, ncol = 3, nrow = 3)
+dev.off()
+
+
+library(ggplot2)
+
+data <- read.csv("wet_Model1_Merged_Bayes_Factor.csv")
+
+color_scale <- scale_fill_gradient(low = "skyblue", high = "darkblue")
+
+p <- ggplot(data, aes(x = variable, y = Bayes.factor, fill = Bayes.factor)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.3f", Bayes.factor)), vjust = -0.5, size = 5) +
+  theme_minimal(base_size = 14) +
+  color_scale +
+  labs(title = "Bayes Factor Variation with Different Covariates", 
+       x = "Covariate", y = "Log10 Bayes Factor") +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.background = element_rect(fill = "white"),
+    legend.key = element_rect(fill = "white"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_y_continuous(breaks = seq(floor(min(data$Bayes.factor)), ceiling(max(data$Bayes.factor)), by = 0.25))
+
+ggsave("Normal_Bayes_Factor_Variation.png", plot = p, width = 10, height = 7.5, dpi = 300)
+
+print("Bayes factor variation plot saved as 'Bayes_Factor_Variation.png'")
+
+
+```
+
+
+
+
+###################**late**################################
+```{r}
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Indi_Causality_Data/Late//")
+data.Q = read.csv('NQ_Causality_Combined_data.csv')
+
+
+check.DJF = 0.4912692	
+
+model <- bn.fit(dag,data.Q)
+joint = gbn2mvnorm(model)
+
+
+
+
+mutEP = mutilated(model, evidence=list(EP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],-1,-Inf)
+
+mutEP$EP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutEP,event = (Q>=check.DJF),evidence = (EP>0))
+}
+mutEP$EP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutEP,event = (Q>=check.DJF),evidence = (EP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat1 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat1 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Eastern Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot1 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for Eastern Precipitation") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutN12 = mutilated(model, evidence=list(N12 = 0))
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],-1,-Inf)
+
+mutN12$N12 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN12,event = (Q>=check.DJF),evidence = (N12>0))
+}
+mutN12$N12 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN12,event = (Q>=check.DJF),evidence = (N12<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat2 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat2 <- rbind(stat2,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Nino12'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot2 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO12") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutN3 = mutilated(model, evidence=list(N3 = 0))
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],-1,-Inf)
+
+mutN3$N3 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN3,event = (Q>=check.DJF),evidence = (N3>0))
+}
+mutN3$N3 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN3,event = (Q>=check.DJF),evidence = (N3<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat3 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat3 <- rbind(stat3,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO3'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot3 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO3") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+##Nino4
+mutN4 = mutilated(model, evidence=list(N4 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],-1,-Inf)
+
+mutN4$N4 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN4,event = (Q>=check.DJF),evidence = (N4>0))
+}
+mutN4$N4 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN4,event = (Q>=check.DJF),evidence = (N4<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat4 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat4 <- rbind(stat4,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO4'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot4 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO4") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutWP = mutilated(model, evidence=list(WP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],-1,-Inf)
+
+mutWP$WP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutWP,event = (Q>=check.DJF),evidence = (WP>0))
+}
+mutWP$WP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutWP,event = (Q>=check.DJF),evidence = (WP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat5 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat5 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Western Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot5 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+
+##MJO
+
+mutMJO = mutilated(model, evidence=list(MJO = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],-1,-Inf)
+
+mutMJO$MJO = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutMJO,event = (Q>=check.DJF),evidence = (MJO>0))
+}
+mutMJO$MJO = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutMJO,event = (Q>=check.DJF),evidence = (MJO<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat6 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat6 <- rbind(stat6,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'MJO'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot6 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutDMI = mutilated(model, evidence=list(DMI = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],-1,-Inf)
+
+mutDMI$DMI = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutDMI,event = (Q>=check.DJF),evidence = (DMI>0))
+}
+mutDMI$DMI = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutDMI,event = (Q>=check.DJF),evidence = (DMI<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat7 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat7 <- rbind(stat7,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'DMI'))
+
+
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot7 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for DMI") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+combined_stat <- rbind(stat1, stat2, stat3, stat4, stat5, stat6, stat7)
+
+write.csv(combined_stat, "wet_Model1_Merged_Bayes_Factor.csv", row.names = FALSE)
+
+print("Merged data has been successfully written to 'Merged_Bayes_Factor_Results.csv'")
+
+library(gridExtra)
+library(grid)
+
+plot_list <- lapply(list(Plot1, Plot2, Plot3, Plot4,Plot5, Plot6, Plot7), function(p) {
+  grid.grabExpr(print(p))
+})
+
+png("Wet_Bayes_factor_Box_plot.png", width = 1200, height = 1200, res = 150)
+grid.arrange(grobs = plot_list, ncol = 3, nrow = 3)
+dev.off()
+
+
+library(ggplot2)
+
+data <- read.csv("wet_Model1_Merged_Bayes_Factor.csv")
+
+
+color_scale <- scale_fill_gradient(low = "skyblue", high = "darkblue")
+
+p <- ggplot(data, aes(x = variable, y = Bayes.factor, fill = Bayes.factor)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.3f", Bayes.factor)), vjust = -0.5, size = 5) +
+  theme_minimal(base_size = 14) +
+  color_scale +
+  labs(title = "Bayes Factor Variation with Different Covariates", 
+       x = "Covariate", y = "Log10 Bayes Factor") +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.background = element_rect(fill = "white"),
+    legend.key = element_rect(fill = "white"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_y_continuous(breaks = seq(floor(min(data$Bayes.factor)), ceiling(max(data$Bayes.factor)), by = 0.25))
+
+ggsave("wet_Bayes_Factor_Variation.png", plot = p, width = 10, height = 7.5, dpi = 300)
+
+print("Bayes factor variation plot saved as 'Bayes_Factor_Variation.png'")
+
+
+
+
+
+
+
+############################ dRY ###########################################
+
+
+
+
+check.DJF = -0.4912692	
+
+model <- bn.fit(dag,data.Q)
+joint = gbn2mvnorm(model)
+
+
+
+
+mutEP = mutilated(model, evidence=list(EP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],-1,-Inf)
+
+mutEP$EP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutEP,event = (Q<=check.DJF),evidence = (EP>0))
+}
+mutEP$EP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutEP,event = (Q<=check.DJF),evidence = (EP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat1 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat1 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Eastern Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot1 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for Eastern Precipitation") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+##Nino12
+mutN12 = mutilated(model, evidence=list(N12 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],-1,-Inf)
+
+# lower tail truncation
+mutN12$N12 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN12,event = (Q<=check.DJF),evidence = (N12>0))
+}
+mutN12$N12 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN12,event = (Q<=check.DJF),evidence = (N12<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat2 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat2 <- rbind(stat2,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Nino12'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot2 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO12") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+##Nino3
+
+mutN3 = mutilated(model, evidence=list(N3 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],-1,-Inf)
+
+mutN3$N3 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN3,event = (Q<=check.DJF),evidence = (N3>0))
+}
+mutN3$N3 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN3,event = (Q<=check.DJF),evidence = (N3<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat3 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat3 <- rbind(stat3,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO3'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot3 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO3") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+##Nino4
+mutN4 = mutilated(model, evidence=list(N4 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],-1,-Inf)
+
+mutN4$N4 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN4,event = (Q<=check.DJF),evidence = (N4>0))
+}
+mutN4$N4 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN4,event = (Q<=check.DJF),evidence = (N4<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat4 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat4 <- rbind(stat4,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO4'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot4 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO4") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutWP = mutilated(model, evidence=list(WP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],-1,-Inf)
+
+mutWP$WP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutWP,event = (Q<=check.DJF),evidence = (WP>0))
+}
+mutWP$WP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutWP,event = (Q<=check.DJF),evidence = (WP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat5 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat5 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Western Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot5 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+
+##MJO
+
+mutMJO = mutilated(model, evidence=list(MJO = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],-1,-Inf)
+
+mutMJO$MJO = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutMJO,event = (Q<=check.DJF),evidence = (MJO>0))
+}
+mutMJO$MJO = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutMJO,event = (Q<=check.DJF),evidence = (MJO<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat6 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat6 <- rbind(stat6,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'MJO'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot6 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutDMI = mutilated(model, evidence=list(DMI = 0)) 
+# parameters of truncated distribution
+param.lower <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],-1,-Inf)
+
+mutDMI$DMI = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutDMI,event = (Q<=check.DJF),evidence = (DMI>0))
+}
+mutDMI$DMI = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutDMI,event = (Q<=check.DJF),evidence = (DMI<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat7 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat7 <- rbind(stat7,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'DMI'))
+
+
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot7 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for DMI") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+combined_stat <- rbind(stat1, stat2, stat3, stat4, stat5, stat6, stat7)
+
+# Write the merged data frame to a CSV file
+write.csv(combined_stat, "wet_Model1_Merged_Bayes_Factor.csv", row.names = FALSE)
+
+print("Merged data has been successfully written to 'Merged_Bayes_Factor_Results.csv'")
+
+library(gridExtra)
+library(grid)
+
+plot_list <- lapply(list(Plot1, Plot2, Plot3, Plot4,Plot5, Plot6, Plot7), function(p) {
+  grid.grabExpr(print(p))
+})
+
+png("Dry_Bayes_factor_Box_plot.png", width = 1200, height = 1200, res = 150)
+grid.arrange(grobs = plot_list, ncol = 3, nrow = 3)
+dev.off()
+
+
+library(ggplot2)
+
+data <- read.csv("wet_Model1_Merged_Bayes_Factor.csv")
+
+color_scale <- scale_fill_gradient(low = "skyblue", high = "darkblue")
+
+p <- ggplot(data, aes(x = variable, y = Bayes.factor, fill = Bayes.factor)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.3f", Bayes.factor)), vjust = -0.5, size = 5) +
+  theme_minimal(base_size = 14) +
+  color_scale +
+  labs(title = "Bayes Factor Variation with Different Covariates", 
+       x = "Covariate", y = "Log10 Bayes Factor") +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.background = element_rect(fill = "white"),
+    legend.key = element_rect(fill = "white"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_y_continuous(breaks = seq(floor(min(data$Bayes.factor)), ceiling(max(data$Bayes.factor)), by = 0.25))
+
+ggsave("dry_Bayes_Factor_Variation.png", plot = p, width = 10, height = 7.5, dpi = 300)
+
+print("Bayes factor variation plot saved as 'Bayes_Factor_Variation.png'")
+
+
+
+
+
+
+
+############################ Normal ###########################################
+
+check.DJF.wet <- 0.4912692
+check.DJF.dry <- -0.4912692
+
+model <- bn.fit(dag,data.Q)
+joint = gbn2mvnorm(model)
+
+
+
+
+mutEP = mutilated(model, evidence=list(EP = 0)) # placeholder value, will be replaced in the next command
+# Parameters of truncated distribution
+param.lower <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],-1,-Inf)
+
+mutEP$EP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutEP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (EP>0))
+}
+mutEP$EP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutEP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (EP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat1 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat1 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Eastern Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+# Generate the box plot using ggplot2
+Plot1 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for Eastern Precipitation") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutN12 = mutilated(model, evidence=list(N12 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],-1,-Inf)
+
+
+mutN12$N12 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN12,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N12>0))
+}
+mutN12$N12 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN12,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N12<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat2 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat2 <- rbind(stat2,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Nino12'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot2 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO12") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutN3 = mutilated(model, evidence=list(N3 = 0)) # placeholder value, will be replaced in the next command
+# parameters of truncated distribution
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],-1,-Inf)
+
+mutN3$N3 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN3,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N3>0))
+}
+mutN3$N3 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN3,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N3<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat3 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat3 <- rbind(stat3,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO3'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot3 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO3") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutN4 = mutilated(model, evidence=list(N4 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],-1,-Inf)
+
+mutN4$N4 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN4,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N4>0))
+}
+mutN4$N4 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN4,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N4<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat4 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat4 <- rbind(stat4,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO4'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot4 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO4") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutWP = mutilated(model, evidence=list(WP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],-1,-Inf)
+
+mutWP$WP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutWP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (WP>0))
+}
+mutWP$WP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutWP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (WP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat5 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat5 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Western Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot5 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+
+
+mutMJO = mutilated(model, evidence=list(MJO = 0)) # placeholder value, will be replaced in the next command
+param.lower <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],-1,-Inf)
+
+mutMJO$MJO = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutMJO,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (MJO>0))
+}
+mutMJO$MJO = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutMJO,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (MJO<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat6 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat6 <- rbind(stat6,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'MJO'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot6 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutDMI = mutilated(model, evidence=list(DMI = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],-1,-Inf)
+
+mutDMI$DMI = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutDMI,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (DMI>0))
+}
+mutDMI$DMI = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutDMI,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (DMI<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat7 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat7 <- rbind(stat7,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'DMI'))
+
+
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot7 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for DMI") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+combined_stat <- rbind(stat1, stat2, stat3, stat4, stat5, stat6, stat7)
+
+write.csv(combined_stat, "wet_Model1_Merged_Bayes_Factor.csv", row.names = FALSE)
+
+print("Merged data has been successfully written to 'Merged_Bayes_Factor_Results.csv'")
+
+library(gridExtra)
+library(grid)
+
+plot_list <- lapply(list(Plot1, Plot2, Plot3, Plot4,Plot5, Plot6, Plot7), function(p) {
+  grid.grabExpr(print(p))
+})
+
+png("Normal_Bayes_factor_Box_plot.png", width = 1200, height = 1200, res = 150)
+grid.arrange(grobs = plot_list, ncol = 3, nrow = 3)
+dev.off()
+
+
+library(ggplot2)
+
+data <- read.csv("wet_Model1_Merged_Bayes_Factor.csv")
+
+color_scale <- scale_fill_gradient(low = "skyblue", high = "darkblue")
+
+p <- ggplot(data, aes(x = variable, y = Bayes.factor, fill = Bayes.factor)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.3f", Bayes.factor)), vjust = -0.5, size = 5) +
+  theme_minimal(base_size = 14) +
+  color_scale +
+  labs(title = "Bayes Factor Variation with Different Covariates", 
+       x = "Covariate", y = "Log10 Bayes Factor") +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.background = element_rect(fill = "white"),
+    legend.key = element_rect(fill = "white"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_y_continuous(breaks = seq(floor(min(data$Bayes.factor)), ceiling(max(data$Bayes.factor)), by = 0.25))
+
+ggsave("Normal_Bayes_Factor_Variation.png", plot = p, width = 10, height = 7.5, dpi = 300)
+
+print("Bayes factor variation plot saved as 'Bayes_Factor_Variation.png'")
+
+
+```
+
+
+
+
+###################**Monsoon**################################
+```{r}
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Indi_Causality_Data/Monsoon/")
+data.Q = read.csv('NQ_Causality_Combined_data.csv')
+
+
+check.DJF = 0.4912692	
+
+model <- bn.fit(dag,data.Q)
+joint = gbn2mvnorm(model)
+
+
+
+
+mutEP = mutilated(model, evidence=list(EP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],-1,-Inf)
+
+mutEP$EP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutEP,event = (Q>=check.DJF),evidence = (EP>0))
+}
+mutEP$EP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutEP,event = (Q>=check.DJF),evidence = (EP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat1 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat1 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Eastern Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot1 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for Eastern Precipitation") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutN12 = mutilated(model, evidence=list(N12 = 0))
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],-1,-Inf)
+
+mutN12$N12 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN12,event = (Q>=check.DJF),evidence = (N12>0))
+}
+mutN12$N12 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN12,event = (Q>=check.DJF),evidence = (N12<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat2 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat2 <- rbind(stat2,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Nino12'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot2 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO12") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutN3 = mutilated(model, evidence=list(N3 = 0))
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],-1,-Inf)
+
+mutN3$N3 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN3,event = (Q>=check.DJF),evidence = (N3>0))
+}
+mutN3$N3 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN3,event = (Q>=check.DJF),evidence = (N3<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat3 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat3 <- rbind(stat3,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO3'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot3 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO3") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+##Nino4
+mutN4 = mutilated(model, evidence=list(N4 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],-1,-Inf)
+
+mutN4$N4 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN4,event = (Q>=check.DJF),evidence = (N4>0))
+}
+mutN4$N4 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN4,event = (Q>=check.DJF),evidence = (N4<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat4 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat4 <- rbind(stat4,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO4'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot4 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO4") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutWP = mutilated(model, evidence=list(WP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],-1,-Inf)
+
+mutWP$WP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutWP,event = (Q>=check.DJF),evidence = (WP>0))
+}
+mutWP$WP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutWP,event = (Q>=check.DJF),evidence = (WP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat5 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat5 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Western Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot5 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+
+##MJO
+
+mutMJO = mutilated(model, evidence=list(MJO = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],-1,-Inf)
+
+mutMJO$MJO = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutMJO,event = (Q>=check.DJF),evidence = (MJO>0))
+}
+mutMJO$MJO = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutMJO,event = (Q>=check.DJF),evidence = (MJO<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat6 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat6 <- rbind(stat6,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'MJO'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot6 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutDMI = mutilated(model, evidence=list(DMI = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],-1,-Inf)
+
+mutDMI$DMI = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutDMI,event = (Q>=check.DJF),evidence = (DMI>0))
+}
+mutDMI$DMI = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutDMI,event = (Q>=check.DJF),evidence = (DMI<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat7 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat7 <- rbind(stat7,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'DMI'))
+
+
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot7 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for DMI") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+combined_stat <- rbind(stat1, stat2, stat3, stat4, stat5, stat6, stat7)
+
+write.csv(combined_stat, "wet_Model1_Merged_Bayes_Factor.csv", row.names = FALSE)
+
+print("Merged data has been successfully written to 'Merged_Bayes_Factor_Results.csv'")
+
+library(gridExtra)
+library(grid)
+
+plot_list <- lapply(list(Plot1, Plot2, Plot3, Plot4,Plot5, Plot6, Plot7), function(p) {
+  grid.grabExpr(print(p))
+})
+
+png("Wet_Bayes_factor_Box_plot.png", width = 1200, height = 1200, res = 150)
+grid.arrange(grobs = plot_list, ncol = 3, nrow = 3)
+dev.off()
+
+
+library(ggplot2)
+
+data <- read.csv("wet_Model1_Merged_Bayes_Factor.csv")
+
+
+color_scale <- scale_fill_gradient(low = "skyblue", high = "darkblue")
+
+p <- ggplot(data, aes(x = variable, y = Bayes.factor, fill = Bayes.factor)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.3f", Bayes.factor)), vjust = -0.5, size = 5) +
+  theme_minimal(base_size = 14) +
+  color_scale +
+  labs(title = "Bayes Factor Variation with Different Covariates", 
+       x = "Covariate", y = "Log10 Bayes Factor") +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.background = element_rect(fill = "white"),
+    legend.key = element_rect(fill = "white"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_y_continuous(breaks = seq(floor(min(data$Bayes.factor)), ceiling(max(data$Bayes.factor)), by = 0.25))
+
+ggsave("wet_Bayes_Factor_Variation.png", plot = p, width = 10, height = 7.5, dpi = 300)
+
+print("Bayes factor variation plot saved as 'Bayes_Factor_Variation.png'")
+
+
+
+
+
+
+
+############################ dRY ###########################################
+
+
+
+
+check.DJF = -0.4912692	
+
+model <- bn.fit(dag,data.Q)
+joint = gbn2mvnorm(model)
+
+
+
+
+mutEP = mutilated(model, evidence=list(EP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],-1,-Inf)
+
+mutEP$EP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutEP,event = (Q<=check.DJF),evidence = (EP>0))
+}
+mutEP$EP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutEP,event = (Q<=check.DJF),evidence = (EP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat1 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat1 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Eastern Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot1 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for Eastern Precipitation") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+##Nino12
+mutN12 = mutilated(model, evidence=list(N12 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],-1,-Inf)
+
+# lower tail truncation
+mutN12$N12 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN12,event = (Q<=check.DJF),evidence = (N12>0))
+}
+mutN12$N12 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN12,event = (Q<=check.DJF),evidence = (N12<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat2 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat2 <- rbind(stat2,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Nino12'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot2 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO12") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+##Nino3
+
+mutN3 = mutilated(model, evidence=list(N3 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],-1,-Inf)
+
+mutN3$N3 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN3,event = (Q<=check.DJF),evidence = (N3>0))
+}
+mutN3$N3 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN3,event = (Q<=check.DJF),evidence = (N3<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat3 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat3 <- rbind(stat3,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO3'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot3 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO3") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+##Nino4
+mutN4 = mutilated(model, evidence=list(N4 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],-1,-Inf)
+
+mutN4$N4 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN4,event = (Q<=check.DJF),evidence = (N4>0))
+}
+mutN4$N4 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN4,event = (Q<=check.DJF),evidence = (N4<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat4 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat4 <- rbind(stat4,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO4'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot4 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO4") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutWP = mutilated(model, evidence=list(WP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],-1,-Inf)
+
+mutWP$WP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutWP,event = (Q<=check.DJF),evidence = (WP>0))
+}
+mutWP$WP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutWP,event = (Q<=check.DJF),evidence = (WP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat5 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat5 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Western Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot5 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+
+##MJO
+
+mutMJO = mutilated(model, evidence=list(MJO = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],-1,-Inf)
+
+mutMJO$MJO = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutMJO,event = (Q<=check.DJF),evidence = (MJO>0))
+}
+mutMJO$MJO = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutMJO,event = (Q<=check.DJF),evidence = (MJO<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat6 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat6 <- rbind(stat6,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'MJO'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot6 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutDMI = mutilated(model, evidence=list(DMI = 0)) 
+# parameters of truncated distribution
+param.lower <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],-1,-Inf)
+
+mutDMI$DMI = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutDMI,event = (Q<=check.DJF),evidence = (DMI>0))
+}
+mutDMI$DMI = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutDMI,event = (Q<=check.DJF),evidence = (DMI<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat7 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat7 <- rbind(stat7,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'DMI'))
+
+
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot7 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for DMI") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+combined_stat <- rbind(stat1, stat2, stat3, stat4, stat5, stat6, stat7)
+
+# Write the merged data frame to a CSV file
+write.csv(combined_stat, "wet_Model1_Merged_Bayes_Factor.csv", row.names = FALSE)
+
+print("Merged data has been successfully written to 'Merged_Bayes_Factor_Results.csv'")
+
+library(gridExtra)
+library(grid)
+
+plot_list <- lapply(list(Plot1, Plot2, Plot3, Plot4,Plot5, Plot6, Plot7), function(p) {
+  grid.grabExpr(print(p))
+})
+
+png("Dry_Bayes_factor_Box_plot.png", width = 1200, height = 1200, res = 150)
+grid.arrange(grobs = plot_list, ncol = 3, nrow = 3)
+dev.off()
+
+
+library(ggplot2)
+
+data <- read.csv("wet_Model1_Merged_Bayes_Factor.csv")
+
+color_scale <- scale_fill_gradient(low = "skyblue", high = "darkblue")
+
+p <- ggplot(data, aes(x = variable, y = Bayes.factor, fill = Bayes.factor)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.3f", Bayes.factor)), vjust = -0.5, size = 5) +
+  theme_minimal(base_size = 14) +
+  color_scale +
+  labs(title = "Bayes Factor Variation with Different Covariates", 
+       x = "Covariate", y = "Log10 Bayes Factor") +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.background = element_rect(fill = "white"),
+    legend.key = element_rect(fill = "white"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_y_continuous(breaks = seq(floor(min(data$Bayes.factor)), ceiling(max(data$Bayes.factor)), by = 0.25))
+
+ggsave("dry_Bayes_Factor_Variation.png", plot = p, width = 10, height = 7.5, dpi = 300)
+
+print("Bayes factor variation plot saved as 'Bayes_Factor_Variation.png'")
+
+
+
+
+
+
+
+############################ Normal ###########################################
+
+check.DJF.wet <- 0.4912692
+check.DJF.dry <- -0.4912692
+
+model <- bn.fit(dag,data.Q)
+joint = gbn2mvnorm(model)
+
+
+
+
+mutEP = mutilated(model, evidence=list(EP = 0)) # placeholder value, will be replaced in the next command
+# Parameters of truncated distribution
+param.lower <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["EP"],joint$sigma["EP", "EP"],-1,-Inf)
+
+mutEP$EP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutEP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (EP>0))
+}
+mutEP$EP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutEP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (EP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat1 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat1 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Eastern Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+# Generate the box plot using ggplot2
+Plot1 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for Eastern Precipitation") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutN12 = mutilated(model, evidence=list(N12 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N12"],joint$sigma["N12", "N12"],-1,-Inf)
+
+
+mutN12$N12 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN12,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N12>0))
+}
+mutN12$N12 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN12,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N12<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat2 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat2 <- rbind(stat2,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Nino12'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot2 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO12") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutN3 = mutilated(model, evidence=list(N3 = 0)) # placeholder value, will be replaced in the next command
+# parameters of truncated distribution
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N3"],joint$sigma["N3", "N3"],-1,-Inf)
+
+mutN3$N3 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN3,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N3>0))
+}
+mutN3$N3 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN3,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N3<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat3 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat3 <- rbind(stat3,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO3'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot3 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO3") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutN4 = mutilated(model, evidence=list(N4 = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["N4"],joint$sigma["N4", "N4"],-1,-Inf)
+
+mutN4$N4 = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutN4,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N4>0))
+}
+mutN4$N4 = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutN4,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (N4<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat4 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat4 <- rbind(stat4,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'NinO4'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot4 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for NINO4") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+mutWP = mutilated(model, evidence=list(WP = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["WP"],joint$sigma["WP", "WP"],-1,-Inf)
+
+mutWP$WP = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutWP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (WP>0))
+}
+mutWP$WP = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutWP,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (WP<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat5 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat5 <- rbind(stat1,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'Western Precipitation'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot5 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+
+
+
+mutMJO = mutilated(model, evidence=list(MJO = 0)) # placeholder value, will be replaced in the next command
+param.lower <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["MJO"],joint$sigma["MJO", "MJO"],-1,-Inf)
+
+mutMJO$MJO = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutMJO,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (MJO>0))
+}
+mutMJO$MJO = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutMJO,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (MJO<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat6 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat6 <- rbind(stat6,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'MJO'))
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot6 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for MJO") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+mutDMI = mutilated(model, evidence=list(DMI = 0)) 
+param.lower <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],Inf,1)
+param.upper <- estimate_truncated_normal_parameters(joint$mu["DMI"],joint$sigma["DMI", "DMI"],-1,-Inf)
+
+mutDMI$DMI = list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+query.high = query.low = NULL
+for (q in 1:1000){
+  query.high[q] <- cpquery(mutDMI,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (DMI>0))
+}
+mutDMI$DMI = list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+for (q in 1:1000){
+  query.low[q] <- cpquery(mutDMI,event = (Q > check.DJF.dry & Q < check.DJF.wet),evidence = (DMI<0))
+}
+query.high[query.high==0]=0.000000000001
+query.low[query.low==0]=0.000000000001
+stat7 <- data.frame(num = numeric(), deno = numeric(), Bayes.factor = numeric(), 
+                   flood_threshold = numeric(), season = character(), variable = character())
+
+stat7 <- rbind(stat7,data.frame('num' = median(query.high),'deno'= median(query.low),
+                              'Bayes.factor'=log10(mean(query.high)/mean(query.low)),
+                              'flood_threshold'=check.DJF,'season'='JJAS Monsoon',
+                              'variable'= 'DMI'))
+
+
+library(ggplot2)
+
+bayes_factor_data <- data.frame(BayesFactor = log10(query.high / query.low))
+
+Plot7 <- ggplot(bayes_factor_data, aes(y = BayesFactor)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Bayes Factor for DMI") +
+  ylab("Log10 Bayes Factor") +
+  theme_minimal()
+
+percentiles <- quantile(bayes_factor_data$BayesFactor, probs = c(0.05, 0.95))
+print(paste("5th percentile:", percentiles[1]))
+print(paste("95th percentile:", percentiles[2]))
+
+
+combined_stat <- rbind(stat1, stat2, stat3, stat4, stat5, stat6, stat7)
+
+write.csv(combined_stat, "wet_Model1_Merged_Bayes_Factor.csv", row.names = FALSE)
+
+print("Merged data has been successfully written to 'Merged_Bayes_Factor_Results.csv'")
+
+library(gridExtra)
+library(grid)
+
+plot_list <- lapply(list(Plot1, Plot2, Plot3, Plot4,Plot5, Plot6, Plot7), function(p) {
+  grid.grabExpr(print(p))
+})
+
+png("Normal_Bayes_factor_Box_plot.png", width = 1200, height = 1200, res = 150)
+grid.arrange(grobs = plot_list, ncol = 3, nrow = 3)
+dev.off()
+
+
+library(ggplot2)
+
+data <- read.csv("wet_Model1_Merged_Bayes_Factor.csv")
+
+color_scale <- scale_fill_gradient(low = "skyblue", high = "darkblue")
+
+p <- ggplot(data, aes(x = variable, y = Bayes.factor, fill = Bayes.factor)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.3f", Bayes.factor)), vjust = -0.5, size = 5) +
+  theme_minimal(base_size = 14) +
+  color_scale +
+  labs(title = "Bayes Factor Variation with Different Covariates", 
+       x = "Covariate", y = "Log10 Bayes Factor") +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.background = element_rect(fill = "white"),
+    legend.key = element_rect(fill = "white"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_y_continuous(breaks = seq(floor(min(data$Bayes.factor)), ceiling(max(data$Bayes.factor)), by = 0.25))
+
+ggsave("Normal_Bayes_Factor_Variation.png", plot = p, width = 10, height = 7.5, dpi = 300)
+
+print("Bayes factor variation plot saved as 'Bayes_Factor_Variation.png'")
+
+
+```
+
+
+
+
+
+
+
+

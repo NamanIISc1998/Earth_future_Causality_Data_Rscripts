@@ -1,0 +1,952 @@
+---
+title: "Tom_Bahadurabad_Streamflow_data"
+author: "Naman Kishan Rastogi"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
+
+**Plot SST SLP Wind as a spatial plot in TROPICAL INDO-PACIFIC sub continent: all wind vectors marked**
+```{r}
+
+library(tidyverse)
+library(ggplot2)
+library(sf)
+library(ggquiver)
+library(metR)
+library(maps)  # for world2
+
+
+setwd("/Volumes/Naman_Exter/Tom_Flow_Bahad/Tom_Flow_Bahad/Plot_IVT_SLP_Wind_Together/")
+
+
+phases      <- c("Early", "Peak", "Late", "Monsoon")
+cond_levels <- c("Dry", "Normal", "Wet")  
+fix_lon     <- function(lon) ifelse(lon < 0, lon + 360, lon)
+
+
+tag_x <- 32
+tag_y <- -14
+
+
+sst_all <- map_dfr(c("Wet", "Normal", "Dry"), function(cond) {
+  file <- paste0("SST/SST_", cond, "_years_anomalies.csv")
+  read_csv(file, show_col_types = FALSE) %>%
+    mutate(
+      Condition    = cond,
+      phase        = factor(Phase, levels = phases),
+      lon          = fix_lon(Lon),
+      lat          = Lat,
+      mean_anomaly = Mean_anomaly
+    )
+}) %>%
+  mutate(Condition = factor(Condition, levels = cond_levels))
+
+
+slp_all <- map_dfr(c("Wet", "Normal", "Dry"), function(cond) {
+  file <- paste0("SLP/SLP_Seasonal_Phase_Anomalies_", cond, "_Years.csv")
+  read_csv(file, show_col_types = FALSE) %>%
+    mutate(
+      Condition = cond,
+      phase     = factor(phase, levels = phases),
+      lon       = fix_lon(lon)
+    )
+}) %>%
+  mutate(Condition = factor(Condition, levels = cond_levels))
+
+
+uwnd_all <- map_dfr(c("Wet", "Normal", "Dry"), function(cond) {
+  file <- paste0("UWIND/uwnd_seasonal_phase_anomalies_", cond, "_years.csv")
+  read_csv(file, show_col_types = FALSE) %>%
+    mutate(Condition = cond)
+})
+
+vwnd_all <- map_dfr(c("Wet", "Normal", "Dry"), function(cond) {
+  file <- paste0("VWIND/vwnd_seasonal_phase_anomalies_", cond, "_years.csv")
+  read_csv(file, show_col_types = FALSE) %>%
+    mutate(Condition = cond)
+})
+
+wind_all <- left_join(uwnd_all, vwnd_all,
+                      by = c("phase", "lon", "lat", "Condition")) %>%
+  rename(uwnd = UWIND, vwnd = VwIND) %>%
+  mutate(
+    phase          = factor(phase, levels = phases),
+    lon            = fix_lon(lon),
+    wind_magnitude = sqrt(uwnd^2 + vwnd^2)
+  ) %>%
+  filter(row_number() %% 4 == 0) %>%        # reduce density
+  mutate(Condition = factor(Condition, levels = cond_levels))
+
+
+world2_map <- map_data("world2")
+
+
+india_boundary <- st_read(
+  "/Volumes/Naman_Exter/Tom_Flow_Bahad/Tom_Flow_Bahad/June_11_Teleconn_analysis/India_Shape_File/India_Country_Boundary.shp",
+  quiet = TRUE
+) %>%
+  st_transform(crs = 4326) %>%
+  st_wrap_dateline(options = c("WRAPDATELINE=YES", "DATELINEOFFSET=180")) %>%
+  st_shift_longitude()
+
+india_boundary_df <- india_boundary %>%
+  st_cast("MULTIPOLYGON") %>%
+  st_cast("POLYGON") %>%
+  mutate(id = row_number()) %>%
+  st_cast("LINESTRING") %>%
+  st_coordinates() %>%
+  as.data.frame() %>%
+  rename(lon = X, lat = Y) %>%
+  mutate(group = L1)
+
+
+breaks_seq <- seq(-1, 1, by = 0.2)
+color_palette <- c(
+  "purple4", "purple", "deepskyblue", "skyblue",
+  "white", "white",
+  "green", "yellow", "darkorange", "red"
+)
+
+
+combined_plot <- ggplot() +
+  geom_raster(data = sst_all,
+              aes(x = lon, y = lat, fill = mean_anomaly)) +
+  scale_fill_stepsn(
+    colors = color_palette,
+    breaks = breaks_seq,
+    limits = c(-1, 1),
+    name   = "SST Anomaly (°C)",
+    guide  = guide_colorbar(
+      title.position = "top",
+      barwidth       = unit(6.5, "in"),
+      barheight      = unit(0.5, "cm"),
+      frame.colour   = "black",
+      ticks.colour   = "black",
+      label.position = "bottom"
+    )
+  ) +
+  geom_polygon(data = world2_map,
+               aes(x = long, y = lat, group = group),
+               fill = "gray90", color = "gray40", linewidth = 0.25) +
+  geom_path(data = india_boundary_df,
+            aes(x = lon, y = lat, group = group),
+            color = "black", linewidth = 0.4) +
+  geom_contour(data = dplyr::filter(slp_all, mean_anomaly > 0),
+               aes(x = lon, y = lat, z = mean_anomaly),
+               binwidth = 0.5, color = "red",
+               linetype = "dashed", linewidth = 0.65) +
+  geom_contour(data = dplyr::filter(slp_all, mean_anomaly < 0),
+               aes(x = lon, y = lat, z = mean_anomaly),
+               binwidth = 0.5, color = "mediumblue",
+               linetype = "dashed", linewidth = 0.65) +
+  geom_contour(data = slp_all,
+               aes(x = lon, y = lat, z = mean_anomaly),
+               breaks = 0, color = "blue",
+               linetype = "solid", linewidth = 0.6) +
+  geom_text_contour(data = slp_all,
+                    aes(x = lon, y = lat, z = mean_anomaly),
+                    binwidth = 0.5, size = 3.2,
+                    fontface = "bold", stroke = 0.5,
+                    fill = "white", color = "black", skip = 0) +
+  geom_quiver(data = wind_all,
+              aes(x = lon, y = lat, u = uwnd, v = vwnd),
+              vecsize = 4.5, color = "black", alpha = 0.8) +
+  coord_cartesian(xlim = c(30, 300), ylim = c(-15, 25), expand = FALSE) +
+  facet_grid(rows = vars(phase), cols = vars(Condition)) +
+  labs(
+    title = "SST, SLP & Wind Anomalies Across Seasons and Flow Conditions",
+    x = "Longitude", y = "Latitude"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(color = "grey80", size = 0.2),
+    panel.border     = element_rect(color = "#5A5A5A",
+                                    fill = NA, linewidth = 1),
+    axis.text   = element_text(size = 15),
+    axis.title  = element_text(size = 18, face = "bold"),
+    plot.title  = element_text(hjust = 0.5, face = "bold", size = 18),
+    legend.position  = "bottom",
+    legend.direction = "horizontal",
+    legend.title     = element_text(size = 14),
+    legend.text      = element_text(size = 12),
+    strip.text       = element_text(face = "bold", size = 14)
+  ) +
+  scale_x_continuous(breaks = seq(30, 300, by = 60)) +
+  scale_y_continuous(breaks = seq(-15, 25, by = 12.5))
+
+labels_df <- expand_grid(
+  Condition = factor(cond_levels, levels = cond_levels),
+  phase     = factor(phases, levels = phases)
+) %>%
+  arrange(phase, Condition) %>%
+  mutate(
+    label = letters[1:12],
+    x     = tag_x,
+    y     = tag_y
+  )
+
+combined_plot <- combined_plot +
+  geom_text(data = labels_df,
+            aes(x = x, y = y, label = paste0("(", label, ")")),
+            hjust = 0, vjust = 0,
+            size = 5.5, fontface = "bold", color = "red")
+
+
+sst_dw  <- sst_all  %>% filter(Condition %in% c("Dry", "Wet"))
+slp_dw  <- slp_all  %>% filter(Condition %in% c("Dry", "Wet"))
+wind_dw <- wind_all %>% filter(Condition %in% c("Dry", "Wet"))
+
+labels_dw <- expand_grid(
+  Condition = factor(c("Dry", "Wet"), levels = c("Dry", "Wet")),
+  phase     = factor(phases, levels = phases)
+) %>%
+  arrange(phase, Condition) %>%
+  mutate(
+    label = letters[1:8],
+    x     = tag_x,
+    y     = tag_y
+  )
+
+plot_dw <- ggplot() +
+  geom_raster(data = sst_dw, aes(x = lon, y = lat, fill = mean_anomaly)) +
+  scale_fill_stepsn(
+    colors = color_palette,
+    breaks = breaks_seq,
+    limits = c(-1, 1),
+    name   = "SST Anomaly (°C)",
+    guide  = guide_colorbar(
+      title.position = "top",
+      barwidth       = unit(6.5, "in"),
+      barheight      = unit(0.5, "cm"),
+      frame.colour   = "black",
+      ticks.colour   = "black",
+      label.position = "bottom"
+    )
+  ) +
+  geom_polygon(data = world2_map,
+               aes(x = long, y = lat, group = group),
+               fill = "gray90", color = "gray40", linewidth = 0.25) +
+  geom_path(data = india_boundary_df,
+            aes(x = lon, y = lat, group = group),
+            color = "black", linewidth = 0.4) +
+  geom_contour(data = dplyr::filter(slp_dw, mean_anomaly > 0),
+               aes(x = lon, y = lat, z = mean_anomaly),
+               binwidth = 0.5, color = "red", linetype = "dashed", linewidth = 0.65) +
+  geom_contour(data = dplyr::filter(slp_dw, mean_anomaly < 0),
+               aes(x = lon, y = lat, z = mean_anomaly),
+               binwidth = 0.5, color = "mediumblue", linetype = "dashed", linewidth = 0.65) +
+  geom_contour(data = slp_dw,
+               aes(x = lon, y = lat, z = mean_anomaly),
+               breaks = 0, color = "blue", linetype = "solid",linewidth = 0.6) +
+  geom_text_contour(data = slp_dw,
+                    aes(x = lon, y = lat, z = mean_anomaly),
+                    binwidth = 0.5, size = 3.2, fontface = "bold",
+                    stroke = 0.5, fill = "white", color = "black", skip = 0) +
+  geom_quiver(data = wind_dw,
+              aes(x = lon, y = lat, u = uwnd, v = vwnd),
+              vecsize = 4.5, color = "black", alpha = 0.8) +
+  coord_cartesian(xlim = c(30, 300), ylim = c(-15, 25), expand = FALSE) +
+  facet_grid(rows = vars(phase), cols = vars(Condition)) +
+  labs(
+    title = "SST, SLP & Wind Anomalies (Dry & Wet Years)",
+    x = "Longitude", y = "Latitude"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(color = "grey80", size = 0.2),
+    panel.border     = element_rect(color = "#5A5A5A",
+                                    fill = NA, linewidth = 1),
+    axis.text   = element_text(size = 15),
+    axis.title  = element_text(size = 18, face = "bold"),
+    plot.title  = element_text(hjust = 0.5, face = "bold", size = 18),
+    legend.position  = "bottom",
+    legend.direction = "horizontal",
+    legend.title     = element_text(size = 14),
+    legend.text      = element_text(size = 12),
+    strip.text       = element_text(face = "bold", size = 14)
+  ) +
+  scale_x_continuous(breaks = seq(30, 300, by = 60)) +
+  scale_y_continuous(breaks = seq(-15, 25, by = 10)) +
+  geom_text(data = labels_dw,
+            aes(x = x, y = y, label = paste0("(", label, ")")),
+            hjust = 0, vjust = 0,
+            size = 5.5, fontface = "bold", color = "red")
+
+ggsave("SST_SLP_WIND_Anomalies_DryWet_4x2.png", plot = plot_dw,
+       width = 16, height = 10.8, dpi = 300, bg = "white")
+
+
+sst_norm  <- sst_all  %>% filter(Condition == "Normal")
+slp_norm  <- slp_all  %>% filter(Condition == "Normal")
+wind_norm <- wind_all %>% filter(Condition == "Normal")
+
+labels_norm <- tibble(
+  Condition = factor("Normal", levels = "Normal"),
+  phase     = factor(phases, levels = phases),
+  label     = letters[1:4],
+  x         = tag_x,
+  y         = tag_y
+)
+
+plot_norm <- ggplot() +
+  geom_raster(data = sst_norm,
+              aes(x = lon, y = lat, fill = mean_anomaly)) +
+  scale_fill_stepsn(
+    colors = color_palette,
+    breaks = breaks_seq,
+    limits = c(-1, 1),
+    name   = "SST Anomaly (°C)",
+    guide  = guide_colorbar(
+      title.position = "top",
+      barwidth       = unit(6.5, "in"),
+      barheight      = unit(0.5, "cm"),
+      frame.colour   = "black",
+      ticks.colour   = "black",
+      label.position = "bottom"
+    )
+  ) +
+  geom_polygon(data = world2_map,
+               aes(x = long, y = lat, group = group),
+               fill = "gray90", color = "gray40", linewidth = 0.25) +
+  geom_path(data = india_boundary_df,
+            aes(x = lon, y = lat, group = group),
+            color = "black", linewidth = 0.4) +
+  geom_contour(data = dplyr::filter(slp_norm, mean_anomaly > 0),
+               aes(x = lon, y = lat, z = mean_anomaly),
+               binwidth = 0.5, color = "red", linetype = "dashed", linewidth = 0.65) +
+  geom_contour(data = dplyr::filter(slp_norm, mean_anomaly < 0),
+               aes(x = lon, y = lat, z = mean_anomaly),
+               binwidth = 0.5, color = "mediumblue", linetype = "dashed", linewidth = 0.65) +
+  geom_contour(data = slp_norm,
+               aes(x = lon, y = lat, z = mean_anomaly),
+               breaks = 0, color = "blue", linetype = "solid", linewidth = 0.6) +
+  geom_text_contour(data = slp_norm,
+                    aes(x = lon, y = lat, z = mean_anomaly),
+                    binwidth = 0.5, size = 3.2, fontface = "bold",
+                    stroke = 0.5, fill = "white", color = "black", skip = 0) +
+  geom_quiver(data = wind_norm,
+              aes(x = lon, y = lat, u = uwnd, v = vwnd),
+              vecsize = 4.5, color = "black", alpha = 0.8) +
+  coord_cartesian(xlim = c(30, 300), ylim = c(-15, 25), expand = FALSE) +
+  facet_grid(rows = vars(phase), cols = vars(Condition)) +
+  labs(
+    title = "SST, SLP & Wind Anomalies (Normal Years)",
+    x = "Longitude", y = "Latitude"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(color = "grey80", size = 0.2),
+    panel.border     = element_rect(color = "#5A5A5A",
+                                    fill = NA, linewidth = 1),
+    axis.text   = element_text(size = 15),
+    axis.title  = element_text(size = 18, face = "bold"),
+    plot.title  = element_text(hjust = 0.5, face = "bold", size = 18),
+    legend.position  = "bottom",
+    legend.direction = "horizontal",
+    legend.title     = element_text(size = 14),
+    legend.text      = element_text(size = 12),
+    strip.text       = element_text(face = "bold", size = 14)
+  ) +
+  scale_x_continuous(breaks = seq(30, 300, by = 60)) +
+  scale_y_continuous(breaks = seq(-15, 25, by = 12.5)) +
+  geom_text(data = labels_norm,
+            aes(x = x, y = y, label = paste0("(", label, ")")),
+            hjust = 0, vjust = 0,
+            size = 5.5, fontface = "bold", color = "red")
+
+ggsave("SST_SLP_WIND_Anomalies_Normal_4x1.png", plot = plot_norm,
+       width = 8.5, height = 10.8, dpi = 300, bg = "white")
+
+```
+
+
+
+**Plot IVT SLP Wind as a spatial plot in Indian sub continent: all wind vectors marked**
+```{r}
+
+library(tidyverse)
+library(ggplot2)
+library(sf)
+library(ggquiver)
+library(metR)
+library(maps)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Flow_Bahad/Tom_Flow_Bahad/Plot_IVT_SLP_Wind_Together/")
+
+
+phases     <- c("Early", "Peak", "Late", "Monsoon")
+conditions <- c("Dry", "Normal", "Wet")  # ORDER: Dry, Normal, Wet
+fix_lon    <- function(lon) ifelse(lon > 180, lon - 360, lon)
+
+
+ivt_all <- map_dfr(conditions, function(cond) {
+  read_csv(
+    file = file.path("IVT", cond,
+                     paste0("IVT_Seasonal_Phase_Anomalies_", cond, "_Years.csv"))
+  ) %>%
+    mutate(
+      Condition = factor(cond, levels = conditions),
+      phase     = factor(phase, levels = phases),
+      lon       = fix_lon(lon)
+    )
+})
+
+slp_all <- map_dfr(conditions, function(cond) {
+  read_csv(
+    file = file.path("SLP",
+                     paste0("SLP_Seasonal_Phase_Anomalies_", cond, "_Years.csv"))
+  ) %>%
+    mutate(
+      Condition = factor(cond, levels = conditions),
+      phase     = factor(phase, levels = phases),
+      lon       = fix_lon(lon)
+    )
+})
+
+
+uwnd_all <- map_dfr(conditions, function(cond) {
+  read_csv(
+    file = file.path("UWIND",
+                     paste0("uwnd_seasonal_phase_anomalies_", tolower(cond), "_years.csv"))
+  ) %>%
+    rename_with(tolower) %>%
+    mutate(Condition = factor(cond, levels = conditions))
+})
+
+vwnd_all <- map_dfr(conditions, function(cond) {
+  read_csv(
+    file = file.path("VWIND",
+                     paste0("vwnd_seasonal_phase_anomalies_", tolower(cond), "_years.csv"))
+  ) %>%
+    rename_with(tolower) %>%
+    mutate(Condition = factor(cond, levels = conditions))
+})
+
+wind_all <- left_join(
+  uwnd_all, vwnd_all,
+  by = c("phase", "lon", "lat", "Condition")
+) %>%
+  rename(
+    uwnd = any_of(c("uwnd", "uwind", "uwind_anom")),
+    vwnd = any_of(c("vwnd", "vwind", "vwind_anom"))
+  ) %>%
+  mutate(
+    phase          = factor(phase, levels = phases),
+    lon            = fix_lon(lon),
+    wind_magnitude = sqrt(uwnd^2 + vwnd^2)
+  )
+
+world2_map <- map_data("world2")
+
+india_boundary <- st_read(
+  "/Volumes/Naman_Exter/Tom_Flow_Bahad/Tom_Flow_Bahad/June_11_Teleconn_analysis/India_Shape_File/India_Country_Boundary.shp"
+) %>%
+  st_transform(4326) %>%
+  st_wrap_dateline(options = c("WRAPDATELINE=YES", "DATELINEOFFSET=180")) %>%
+  st_shift_longitude()
+
+india_df <- india_boundary %>%
+  st_cast("MULTIPOLYGON") %>%
+  st_cast("POLYGON") %>%
+  mutate(id = row_number()) %>%
+  st_cast("LINESTRING") %>%
+  st_coordinates() %>%
+  as.data.frame() %>%
+  rename(lon = X, lat = Y) %>%
+  mutate(group = L1)
+
+basin <- st_read(
+  "/Volumes/Naman_Exter/Tom_Flow_Bahad/Tom_Flow_Bahad/June_11_Teleconn_analysis/BRB_Shape_Files/brahmaputra_basin.shp"
+) %>%
+  st_transform(4326) %>%
+  st_wrap_dateline(options = c("WRAPDATELINE=YES", "DATELINEOFFSET=180")) %>%
+  st_shift_longitude()
+
+basin_df <- basin %>%
+  st_cast("MULTIPOLYGON") %>%
+  st_cast("POLYGON") %>%
+  mutate(id = row_number()) %>%
+  st_cast("LINESTRING") %>%
+  st_coordinates() %>%
+  as.data.frame() %>%
+  rename(lon = X, lat = Y) %>%
+  mutate(group = L1)
+
+
+labels_all <- expand_grid(
+  Condition = factor(c("Dry", "Normal", "Wet"),
+                     levels = c("Dry", "Normal", "Wet")),
+  phase     = factor(phases, levels = phases)
+) %>%
+  arrange(phase, Condition) %>%
+  mutate(
+    label = letters[1:12],
+    x     = 52,
+    y     = -11
+  )
+
+
+labels_dw <- expand_grid(
+  Condition = factor(c("Dry", "Wet"),
+                     levels = c("Dry", "Wet")),
+  phase     = factor(phases, levels = phases)
+) %>%
+  arrange(phase, Condition) %>%
+  mutate(
+    label = letters[1:8], 
+    x     = 52,
+    y     = -11
+  )
+
+
+labels_norm <- tibble(
+  Condition = factor("Normal", levels = "Normal"),
+  phase     = factor(phases, levels = phases),
+  label     = letters[1:4],  # a–d
+  x         = 52,
+  y         = -11
+)
+
+
+make_ivt_slp_wind_plot <- function(ivt, slp, wind, labels, title_text) {
+
+  ggplot() +
+   
+    geom_raster(data = ivt, aes(x = lon, y = lat, fill = mean_anomaly)) +
+    scale_fill_gradient2(
+      low = "navy", high = "darkred", mid = "white",
+      midpoint = 0,
+      limits = c(-120, 120),
+      breaks = seq(-120, 120, 20),
+      name = expression("IVT Anomaly (kg"~m^-1~s^-1*")"),
+      guide = guide_colorbar(
+        title.position = "top",
+        barwidth = unit(6.5, "in"),
+        barheight = unit(0.5, "cm"),
+        label.position = "bottom"
+      )
+    ) +
+
+    geom_contour(
+      data = dplyr::filter(slp, mean_anomaly > 0),
+      aes(x = lon, y = lat, z = mean_anomaly),
+      binwidth = 0.15,
+      colour   = "red",
+      linetype = "dashed",
+      linewidth = 0.55
+    ) +
+    geom_contour(
+      data = dplyr::filter(slp, mean_anomaly < 0),
+      aes(x = lon, y = lat, z = mean_anomaly),
+      binwidth = 0.15,
+      colour   = "mediumblue",
+      linetype = "dashed",
+      linewidth = 0.55
+    ) +
+    geom_contour(
+      data = slp,
+      aes(x = lon, y = lat, z = mean_anomaly),
+      breaks   = 0,
+      colour   = "blue",
+      linetype = "solid",
+      linewidth = 0.55
+    ) +
+    geom_text_contour(
+      data = slp,
+      aes(x = lon, y = lat, z = mean_anomaly),
+      binwidth = 0.25,
+      size     = 4,
+      stroke   = 0.5,
+      fontface = "bold",
+      fill     = "white",
+      colour   = "black"
+    ) +
+
+    geom_quiver(data = wind,
+                aes(x = lon, y = lat, u = uwnd, v = vwnd),
+                vecsize = 2.5, color = "black", alpha = 0.8) +
+
+    geom_polygon(data = world2_map,
+                 aes(x = long, y = lat, group = group),
+                 fill = NA, color = "gray40", linewidth = 0.3) +
+    geom_path(data = india_df,
+              aes(x = lon, y = lat, group = group),
+              color = "black", linewidth = 0.6) +
+    geom_path(data = basin_df,
+              aes(x = lon, y = lat, group = group),
+              color = "darkgreen", linewidth = 0.5) +
+
+    coord_cartesian(xlim = c(50, 120), ylim = c(-15, 45), expand = FALSE) +
+    facet_grid(rows = vars(phase), cols = vars(Condition)) +
+    labs(title = title_text, x = "Longitude", y = "Latitude") +
+    theme_minimal(base_size = 13) +
+    theme(
+      panel.background = element_rect(fill = "lightblue", color = NA),
+      panel.border = element_rect(color = "#5A5A5A", fill = NA, linewidth = 1),
+      panel.grid.major = element_line(color = "grey80", size = 0.2),
+      axis.title = element_text(size = 15, face = "bold"),
+      axis.text = element_text(size = 18),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 18),
+      legend.position = "bottom",
+      legend.box = "vertical",
+      legend.title = element_text(size = 14),
+      strip.text = element_text(face = "bold", size = 14)
+    ) +
+    scale_x_continuous(breaks = seq(50, 120, 15)) +
+    scale_y_continuous(breaks = seq(-15, 45, 12.5)) +
+    geom_text(
+      data = labels,
+      aes(x = x, y = y, label = paste0("(", label, ")")),
+      size = 5.5, color = "red", fontface = "bold"
+    )
+}
+
+
+plot_ivt_all <- make_ivt_slp_wind_plot(
+  ivt = ivt_all, slp = slp_all, wind = wind_all,
+  labels = labels_all,
+  title_text = "IVT, SLP & Wind Anomalies Across Seasons and Flow Conditions"
+)
+
+
+ivt_dw    <- ivt_all  %>% filter(Condition %in% c("Dry", "Wet"))
+slp_dw    <- slp_all  %>% filter(Condition %in% c("Dry", "Wet"))
+wind_dw   <- wind_all %>% filter(Condition %in% c("Dry", "Wet"))
+
+plot_dw <- make_ivt_slp_wind_plot(
+  ivt = ivt_dw, slp = slp_dw, wind = wind_dw,
+  labels = labels_dw,
+  title_text = "IVT, SLP & Wind Anomalies (Dry & Wet Years)"
+)
+
+ggsave("IVT_SLP_Wind_Anomalies_DryWet_4x2_allwind.png", plot = plot_dw,
+       width = 11, height = 15, dpi = 300, bg = "white")
+
+
+ivt_norm   <- ivt_all   %>% filter(Condition == "Normal")
+slp_norm   <- slp_all   %>% filter(Condition == "Normal")
+wind_norm  <- wind_all  %>% filter(Condition == "Normal")
+
+plot_norm <- make_ivt_slp_wind_plot(
+  ivt = ivt_norm, slp = slp_norm, wind = wind_norm,
+  labels = labels_norm,
+  title_text = "IVT, SLP & Wind Anomalies (Normal Years)"
+)
+
+ggsave("IVT_SLP_Wind_Anomalies_Normal_4x1_allwind.png", plot = plot_norm,
+       width = 7, height = 15, dpi = 300, bg = "white")
+
+```
+
+
+
+**precipitation climatology plots**
+```{r}
+library(tidyverse)
+library(lubridate)
+
+
+file_path <- "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/combined_IMD_rain025_1987_2019.csv"
+
+df <- read.csv(file_path)
+
+
+df$Date <- as.Date(df$Date)
+
+
+df <- df %>%
+  mutate(Month = month(Date))
+
+
+climatology <- df %>%
+  group_by(Month) %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE))) %>%
+  ungroup()
+
+
+month_names <- c("January","February","March","April","May","June",
+                 "July","August","September","October","November","December")
+
+climatology$Month <- month_names[climatology$Month]
+
+
+climatology_final <- climatology %>%
+  pivot_longer(-Month, names_to = "Variable", values_to = "Value") %>%
+  pivot_wider(names_from = Month, values_from = Value) %>%
+  select(Variable, January, February, March, April, May, June,
+         July, August, September, October, November, December)
+
+
+print(climatology_final)
+
+write.csv(
+  climatology_final,
+  file = file.path("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Monthly_Climatology_1987_2019.csv"),
+  row.names = FALSE
+)
+```
+
+**GET EASTERN AND WESTERN CLIMATOLOGY**
+```{r}
+df = read.csv("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/precipitation/Monthly_Climatology_1987_2019.csv")
+head(df)
+
+df <- df %>%
+  mutate(Region = ifelse(Lon >= 92, "EP", "WP"))   # EP = Eastern, WP = Western
+
+
+months <- c("January","February","March","April","May","June",
+            "July","August","September","October","November","December")
+
+
+clim_region <- df %>%
+  group_by(Region) %>%
+  summarise(across(all_of(months), mean, na.rm = TRUE)) %>%
+  pivot_longer(-Region, names_to = "Month", values_to = "Value") %>%
+  pivot_wider(names_from = Region, values_from = Value) %>%
+  select(Month, EP, WP)
+
+
+write.csv(
+  clim_region,
+  "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/precipitation/EP_WP_Climatology.csv",
+  row.names = FALSE
+)
+
+print(clim_region)
+```
+
+**PLOT BASIN DIVISION nkr**
+
+```{r}
+
+library(ggplot2)
+
+
+df <- read.csv("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/precipitation/Monthly_Climatology_1987_2019.csv")
+
+
+df <- df %>%
+  mutate(Region = ifelse(Lon > 92, "Eastern", "Western"))
+
+
+p <- ggplot(df, aes(x = Lon, y = Lat, fill = Region)) +
+  
+  geom_tile(color = "black", linewidth = 0.2) +   # <-- THIS creates grid boxes
+  
+  scale_fill_manual(
+    values = c("Eastern" = "blue", "Western" = "green")
+  ) +
+  
+  coord_fixed() +
+  
+  labs(
+    title = "Grid Classification: Eastern vs Western Brahmaputra Basin",
+    x = "Longitude",
+    y = "Latitude",
+    fill = "Region"
+  ) +
+  
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 14, face = "bold"),
+    legend.position = "right"
+  )
+
+print(p)
+
+
+ggsave(
+  "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/precipitation/EP_WP_Grid_Map.png",
+  p,
+  width = 10, height = 6, dpi = 400, bg = "white"
+)
+```
+
+
+
+**precipitation spatial plot**
+```{r}
+library(tidyverse)
+library(lubridate)
+
+
+file_path <- "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/precipitation/combined_IMD_rain025_1987_2019.csv"
+
+df <- read.csv(file_path, check.names = FALSE)
+
+
+df$Dates <- as.Date(df$Dates, format = "%m/%d/%y")
+
+
+df_long <- df %>%
+  pivot_longer(
+    cols = -Dates,
+    names_to = "Grid",
+    values_to = "P"
+  )
+
+
+df_long <- df_long %>%
+  separate(Grid, into = c("Lon", "Lat"), sep = "_") %>%
+  mutate(
+    Lon   = as.numeric(Lon),
+    Lat   = as.numeric(Lat),
+    Month = month(Dates)
+  )
+
+
+early <- df_long %>%
+  filter(Month %in% c(5, 6)) %>%
+  group_by(Lon, Lat) %>%
+  summarise(Early = sum(P, na.rm = TRUE), .groups = "drop")
+
+
+peak <- df_long %>%
+  filter(Month %in% c(7, 8)) %>%
+  group_by(Lon, Lat) %>%
+  summarise(Peak = sum(P, na.rm = TRUE), .groups = "drop")
+
+
+late <- df_long %>%
+  filter(Month %in% c(9, 10)) %>%
+  group_by(Lon, Lat) %>%
+  summarise(Late = sum(P, na.rm = TRUE), .groups = "drop")
+
+
+monsoon <- df_long %>%
+  filter(Month %in% c(6, 7, 8, 9)) %>%
+  group_by(Lon, Lat) %>%
+  summarise(Monsoon = sum(P, na.rm = TRUE), .groups = "drop")
+
+
+final_df <- early %>%
+  left_join(peak,    by = c("Lon", "Lat")) %>%
+  left_join(late,    by = c("Lon", "Lat")) %>%
+  left_join(monsoon, by = c("Lon", "Lat"))
+
+
+final_df <- final_df %>%
+  arrange(Lat, Lon)
+
+
+write.csv(
+  final_df,
+  "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/precipitation/Seasonal_Climatology_Grids.csv",
+  row.names = FALSE
+)
+
+
+print(head(final_df))
+
+
+
+
+df <- read.csv("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/precipitation/Seasonal_Climatology_Grids.csv")
+
+
+df_long <- df %>%
+  pivot_longer(
+    cols = c(Early, Peak, Late, Monsoon),
+    names_to = "Season",
+    values_to = "P"
+  )
+df_long$P <- df_long$P * 0.0001
+
+season_labels <- c(
+  Early   = "Early Monsoon (May–Jun)",
+  Peak    = "Peak Monsoon (Jul–Aug)",
+  Late    = "Late Monsoon (Sep–Oct)",
+  Monsoon = "Total Monsoon (JJAS)"
+)
+
+df_long$Season <- factor(df_long$Season, levels = names(season_labels))
+df_long$Season <- season_labels[df_long$Season]
+
+
+p <- ggplot(df_long, aes(x = Lon, y = Lat, fill = P)) +
+  
+  geom_tile(color = "black", linewidth = 0.15) +
+  
+  scale_fill_gradientn(
+  colors = c("darkblue", "blue", "cyan", "green", "yellow", "orange", "red"),
+  limits = c(0, 15),
+  name = expression("Precipitation (" * 10^4 * " mm)"),
+  guide = guide_colorbar(
+    barwidth  = unit(14, "cm"),   
+    barheight = unit(0.7, "cm")   
+  )
+)+
+  
+  coord_fixed() +
+  
+  facet_wrap(~Season, ncol = 2) +
+  
+  labs(
+    title = "Seasonal Precipitation Climatology (1987–2019)",
+    x = "Longitude",
+    y = "Latitude"
+  ) +
+  
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+    
+    strip.text = element_text(size = 14, face = "bold"),
+    
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text  = element_text(size = 12),
+    
+    panel.grid = element_line(color = "grey80", linewidth = 0.2),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    
+    legend.position = "bottom",
+    legend.title = element_text(size = 13, face = "bold"),
+    legend.text  = element_text(size = 11)
+  )
+
+
+ggsave(
+  "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/precipitation/Seasonal_Climatology_Map.png",
+  p,
+  width = 12,
+  height = 9,
+  dpi = 400,
+  bg = "white"
+)
+
+print(p)
+```
+

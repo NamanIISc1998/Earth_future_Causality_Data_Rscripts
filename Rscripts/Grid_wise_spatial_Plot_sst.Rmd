@@ -1,0 +1,2366 @@
+---
+title: "Nan_Bal_Meeting_May23"
+author: "Naman Kishan Rastogi"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
+
+
+########################################## **Dry** ##################################
+############################## **Precipitation and SST to streamflow Q**#############
+
+**Bayes Factor analysis**
+```{r}
+set.seed(123)  
+rm(list = ls(all=TRUE))  
+library(tidyverse)  
+library(lubridate) 
+library(bnlearn) 
+```
+
+**CONVERT DATA INTO NORMAL QUANTILES**
+```{r}
+NQ <- function(datain){
+  emp.cdf <- ecdf(datain)
+  ecdf.prob <- emp.cdf(datain)
+  max_datain <- max(datain) 
+  val_range <- max(datain)-min(datain) 
+  maxrow <- which(datain == max_datain) 
+  datain[maxrow]=-Inf
+  
+  second_max <- max(datain) 
+  diff <- max_datain - second_max 
+  second_max_prob <- max(ecdf.prob[ecdf.prob<1]) 
+  adj_prob <- second_max_prob + (diff/val_range)*(1-second_max_prob)  
+  ecdf.prob[maxrow] <- adj_prob
+  
+  norm.quantiles <- qnorm(ecdf.prob,mean = 0, sd = 1)
+  return(norm.quantiles)
+}
+
+NQ_median.flow <- function(datain,median.flow){
+  if (median.flow>max(datain)){
+    return(2)
+  }
+  else{
+    datain<- c(datain,median.flow)
+    quantiles <- NQ(datain)
+    norm.quantile <- quantiles[length(quantiles)]
+    return(norm.quantile)
+  }
+}
+
+```
+
+**Estimate Truncated Normal Parameters**
+```{r}
+estimate_truncated_normal_parameters <- function(nmean, nsd, upper, lower){
+  a <- (lower-nmean)/nsd
+  b <- (upper-nmean)/nsd
+  trunc.mean = nmean + ((dnorm(a)-dnorm(b))/(pnorm(b)-pnorm(a)))*nsd
+  if (b==Inf){
+    term1 = (a*dnorm(a))/(pnorm(b)-pnorm(a))
+  }
+  if (a==-Inf){
+    term1 <- -1*(b*dnorm(b))/(pnorm(b)-pnorm(a))
+  }
+  term2 <- -1*((dnorm(b)-dnorm(a))/(pnorm(b)-pnorm(a)))**2
+  trunc.sd = sqrt(nsd**2 * (1+term1+term2))
+  return(list(mean = trunc.mean, sd = trunc.sd))
+}
+```
+
+
+
+**Define Bayesian Network Structure**
+```{r}
+dag <- model2network("[P][SST][Q|P:SST]")
+print(dag)
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Early/")
+
+png("Grid1BN_DAG.png", width = 1000, height = 800)
+
+plot(dag, 
+     main = "Bayesian Network DAG",  
+     sub = "Causal Relationships Between Variables",
+     col = "black",  
+     lwd = 2,  
+     cex.main = 1.5, 
+     cex.sub = 1.2,  
+     cex = 1.3,  
+     mar = c(5, 5, 5, 5))  
+
+dev.off()
+
+print("Bayesian Network DAG saved as 'Bayesian_Network_DAG.png' with improved visibility")
+
+```
+
+
+**standard normal**
+```{r}
+
+library(readr)
+
+input_dir  <- "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Early"
+output_dir <- file.path(input_dir, "Normalized_Quantiles")
+
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+
+to_normal_quantile <- function(x) {
+  n <- sum(!is.na(x))
+  ranks <- rank(x, ties.method = "average", na.last = "keep")
+  u <- (ranks - 0.5) / n
+  z <- qnorm(u)
+  return(z)
+}
+
+
+for (i in 1:4487) {
+  
+  file_in  <- file.path(input_dir, paste0("grid", i, ".csv"))
+  file_out <- file.path(output_dir, paste0("grid", i, "_normalized.csv"))
+  
+  if (!file.exists(file_in)) {
+    cat(" Missing:", i, "\n")
+    next
+  }
+  
+  df <- read_csv(file_in, show_col_types = FALSE)
+  
+  df_norm <- df
+  for (col in colnames(df)) {
+    if (is.numeric(df[[col]])) {
+      df_norm[[col]] <- to_normal_quantile(df[[col]])
+    }
+  }
+  
+  write_csv(df_norm, file_out)
+  
+  cat("Done grid:", i, "\n")
+}
+
+
+
+```
+
+
+
+**Early Dry**
+```{r}
+library(bnlearn)
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Early//Normalized_Quantiles/")
+
+check.DJF <- -0.4912692
+
+cv_dir <- "DryCV_Pred"
+if (!dir.exists(cv_dir)) {
+  dir.create(cv_dir)
+}
+
+correlation_summary <- data.frame(Grid_Number = integer(), Correlation = numeric())
+bayes_stats_summary <- data.frame()
+
+for (i in 1:4487) {
+  file_normalized <- paste0("grid", i, ".csv")
+  file_actual <- paste0("../grid", i, ".csv")
+  
+  if (!file.exists(file_normalized) || !file.exists(file_actual)) {
+    next
+  }
+
+  data.Q <- read.csv(file_normalized)
+  data <- read_csv(file_actual, show_col_types = FALSE)
+
+  if (!("Q" %in% colnames(data))) {
+    next
+  }
+
+  model <- bn.fit(dag, data.Q)
+  joint <- gbn2mvnorm(model)
+
+  mutSST <- mutilated(model, evidence = list(SST = 0))
+  param.lower <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], Inf, 1)
+  param.upper <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], -1, -Inf)
+
+  mutSST$SST <- list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+  query.high <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q <= check.DJF), evidence = (SST > 0)))
+
+  mutSST$SST <- list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+  query.low <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q <= check.DJF), evidence = (SST < 0)))
+
+  query.high[query.high == 0] <- 1e-12
+  query.low[query.low == 0] <- 1e-12
+
+  stat1 <- data.frame(
+    num = median(query.high),
+    deno = median(query.low),
+    Bayes.factor = log10(mean(query.high) / mean(query.low)),
+    flood_threshold = check.DJF,
+    season = "JJAS Monsoon",
+    variable = "SST",
+    Grid = paste0("grid", i)
+  )
+
+  print(stat1)
+
+  bayes_stats_summary <- rbind(bayes_stats_summary, stat1)
+
+  pred_loo <- numeric(nrow(data.Q))
+  
+  for (j in 1:nrow(data.Q)) {
+    train_data <- data.Q[-j, ]
+    test_data <- data.Q[j, , drop = FALSE]
+    
+    model_loo <- bn.fit(dag, train_data)
+    pred_loo[j] <- predict(model_loo, node = 'Q', test_data, method = 'bayes-lw')
+  }
+  
+  Q_pred_actual <- quantile(data$Q, pnorm(pred_loo), type = 8)
+  
+  correlation_value <- cor(data$Q, Q_pred_actual, use = "complete.obs")
+  
+  cat("Grid", i, "- Correlation between observed and predicted Q:", round(correlation_value, 3), "\n")
+
+  cv_df <- data.frame(Q_Obs = data$Q, Q_CV = Q_pred_actual)
+  write.csv(cv_df, file = file.path(cv_dir, paste0("DryCV_Grid", i, ".csv")), row.names = FALSE)
+  
+  correlation_summary <- rbind(correlation_summary,
+                               data.frame(Grid_Number = i, Correlation = correlation_value))
+}
+
+write.csv(correlation_summary, "DryCV_Correl.csv", row.names = FALSE)
+
+write.csv(bayes_stats_summary, "Dry_Bayes_Factor_Grids.csv", row.names = FALSE)
+
+```
+
+
+
+
+**standard normal**
+```{r}
+library(readr)
+
+input_dir  <- "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Peak/"
+output_dir <- file.path(input_dir, "Normalized_Quantiles")
+
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+
+to_normal_quantile <- function(x) {
+  n <- sum(!is.na(x))
+  ranks <- rank(x, ties.method = "average", na.last = "keep")
+  u <- (ranks - 0.5) / n
+  z <- qnorm(u)
+  return(z)
+}
+
+
+for (i in 1:4487) {
+  
+  file_in  <- file.path(input_dir, paste0("grid", i, ".csv"))
+  file_out <- file.path(output_dir, paste0("grid", i, "_normalized.csv"))
+  
+  if (!file.exists(file_in)) {
+    cat(" Missing:", i, "\n")
+    next
+  }
+  
+  df <- read_csv(file_in, show_col_types = FALSE)
+  
+  df_norm <- df
+  for (col in colnames(df)) {
+    if (is.numeric(df[[col]])) {
+      df_norm[[col]] <- to_normal_quantile(df[[col]])
+    }
+  }
+  
+  write_csv(df_norm, file_out)
+  
+  cat("Done grid:", i, "\n")
+}
+
+```
+
+
+**Peak Dry**
+```{r}
+library(bnlearn)
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Peak//Normalized_Quantiles/")
+
+check.DJF <- -0.4912692
+
+cv_dir <- "DryCV_Pred"
+if (!dir.exists(cv_dir)) {
+  dir.create(cv_dir)
+}
+
+correlation_summary <- data.frame(Grid_Number = integer(), Correlation = numeric())
+bayes_stats_summary <- data.frame()
+
+for (i in 1:4487) {
+  file_normalized <- paste0("grid", i, ".csv")
+  file_actual <- paste0("../grid", i, ".csv")
+  
+  if (!file.exists(file_normalized) || !file.exists(file_actual)) {
+    next
+  }
+
+  data.Q <- read.csv(file_normalized)
+  data <- read_csv(file_actual, show_col_types = FALSE)
+
+  if (!("Q" %in% colnames(data))) {
+    next
+  }
+
+  model <- bn.fit(dag, data.Q)
+  joint <- gbn2mvnorm(model)
+
+  mutSST <- mutilated(model, evidence = list(SST = 0))
+  param.lower <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], Inf, 1)
+  param.upper <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], -1, -Inf)
+
+  mutSST$SST <- list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+  query.high <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q <= check.DJF), evidence = (SST > 0)))
+
+  mutSST$SST <- list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+  query.low <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q <= check.DJF), evidence = (SST < 0)))
+
+  query.high[query.high == 0] <- 1e-12
+  query.low[query.low == 0] <- 1e-12
+
+  stat1 <- data.frame(
+    num = median(query.high),
+    deno = median(query.low),
+    Bayes.factor = log10(mean(query.high) / mean(query.low)),
+    flood_threshold = check.DJF,
+    season = "JJAS Monsoon",
+    variable = "SST",
+    Grid = paste0("grid", i)
+  )
+
+  print(stat1)
+
+  bayes_stats_summary <- rbind(bayes_stats_summary, stat1)
+
+  pred_loo <- numeric(nrow(data.Q))
+  
+  for (j in 1:nrow(data.Q)) {
+    train_data <- data.Q[-j, ]
+    test_data <- data.Q[j, , drop = FALSE]
+    
+    model_loo <- bn.fit(dag, train_data)
+    pred_loo[j] <- predict(model_loo, node = 'Q', test_data, method = 'bayes-lw')
+  }
+  
+  Q_pred_actual <- quantile(data$Q, pnorm(pred_loo), type = 8)
+  
+  correlation_value <- cor(data$Q, Q_pred_actual, use = "complete.obs")
+  
+  cat("Grid", i, "- Correlation between observed and predicted Q:", round(correlation_value, 3), "\n")
+
+  cv_df <- data.frame(Q_Obs = data$Q, Q_CV = Q_pred_actual)
+  write.csv(cv_df, file = file.path(cv_dir, paste0("DryCV_Grid", i, ".csv")), row.names = FALSE)
+  
+  correlation_summary <- rbind(correlation_summary,
+                               data.frame(Grid_Number = i, Correlation = correlation_value))
+}
+
+write.csv(correlation_summary, "DryCV_Correl.csv", row.names = FALSE)
+
+write.csv(bayes_stats_summary, "Dry_Bayes_Factor_Grids.csv", row.names = FALSE)
+
+```
+
+
+**standard normal**
+```{r}
+library(readr)
+
+input_dir  <- "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Late"
+output_dir <- file.path(input_dir, "Normalized_Quantiles")
+
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+
+to_normal_quantile <- function(x) {
+  n <- sum(!is.na(x))
+  ranks <- rank(x, ties.method = "average", na.last = "keep")
+  u <- (ranks - 0.5) / n
+  z <- qnorm(u)
+  return(z)
+}
+
+
+for (i in 1:4487) {
+  
+  file_in  <- file.path(input_dir, paste0("grid", i, ".csv"))
+  file_out <- file.path(output_dir, paste0("grid", i, "_normalized.csv"))
+  
+  if (!file.exists(file_in)) {
+    cat(" Missing:", i, "\n")
+    next
+  }
+  
+  df <- read_csv(file_in, show_col_types = FALSE)
+  
+  df_norm <- df
+  for (col in colnames(df)) {
+    if (is.numeric(df[[col]])) {
+      df_norm[[col]] <- to_normal_quantile(df[[col]])
+    }
+  }
+  
+  write_csv(df_norm, file_out)
+  
+  cat("Done grid:", i, "\n")
+}
+
+```
+
+
+
+**Late Dry**
+```{r}
+library(bnlearn)
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Late//Normalized_Quantiles/")
+
+check.DJF <- -0.4912692
+
+cv_dir <- "DryCV_Pred"
+if (!dir.exists(cv_dir)) {
+  dir.create(cv_dir)
+}
+
+correlation_summary <- data.frame(Grid_Number = integer(), Correlation = numeric())
+bayes_stats_summary <- data.frame()
+
+for (i in 1:4487) {
+  file_normalized <- paste0("grid", i, ".csv")
+  file_actual <- paste0("../grid", i, ".csv")
+  
+  if (!file.exists(file_normalized) || !file.exists(file_actual)) {
+    next
+  }
+
+  data.Q <- read.csv(file_normalized)
+  data <- read_csv(file_actual, show_col_types = FALSE)
+
+  if (!("Q" %in% colnames(data))) {
+    next
+  }
+
+  model <- bn.fit(dag, data.Q)
+  joint <- gbn2mvnorm(model)
+
+  mutSST <- mutilated(model, evidence = list(SST = 0))
+  param.lower <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], Inf, 1)
+  param.upper <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], -1, -Inf)
+
+  mutSST$SST <- list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+  query.high <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q <= check.DJF), evidence = (SST > 0)))
+
+  mutSST$SST <- list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+  query.low <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q <= check.DJF), evidence = (SST < 0)))
+
+  query.high[query.high == 0] <- 1e-12
+  query.low[query.low == 0] <- 1e-12
+
+  stat1 <- data.frame(
+    num = median(query.high),
+    deno = median(query.low),
+    Bayes.factor = log10(mean(query.high) / mean(query.low)),
+    flood_threshold = check.DJF,
+    season = "JJAS Monsoon",
+    variable = "SST",
+    Grid = paste0("grid", i)
+  )
+
+  print(stat1)
+
+  bayes_stats_summary <- rbind(bayes_stats_summary, stat1)
+
+  pred_loo <- numeric(nrow(data.Q))
+  
+  for (j in 1:nrow(data.Q)) {
+    train_data <- data.Q[-j, ]
+    test_data <- data.Q[j, , drop = FALSE]
+    
+    model_loo <- bn.fit(dag, train_data)
+    pred_loo[j] <- predict(model_loo, node = 'Q', test_data, method = 'bayes-lw')
+  }
+  
+  Q_pred_actual <- quantile(data$Q, pnorm(pred_loo), type = 8)
+  
+  correlation_value <- cor(data$Q, Q_pred_actual, use = "complete.obs")
+  
+  cat("Grid", i, "- Correlation between observed and predicted Q:", round(correlation_value, 3), "\n")
+
+  cv_df <- data.frame(Q_Obs = data$Q, Q_CV = Q_pred_actual)
+  write.csv(cv_df, file = file.path(cv_dir, paste0("DryCV_Grid", i, ".csv")), row.names = FALSE)
+  
+  correlation_summary <- rbind(correlation_summary,
+                               data.frame(Grid_Number = i, Correlation = correlation_value))
+}
+
+write.csv(correlation_summary, "DryCV_Correl.csv", row.names = FALSE)
+
+write.csv(bayes_stats_summary, "Dry_Bayes_Factor_Grids.csv", row.names = FALSE)
+
+```
+
+
+**standard normal**
+```{r}
+library(readr)
+
+input_dir  <- "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Monsoon/"
+output_dir <- file.path(input_dir, "Normalized_Quantiles")
+
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+
+to_normal_quantile <- function(x) {
+  n <- sum(!is.na(x))
+  ranks <- rank(x, ties.method = "average", na.last = "keep")
+  u <- (ranks - 0.5) / n
+  z <- qnorm(u)
+  return(z)
+}
+
+
+for (i in 1:4487) {
+  
+  file_in  <- file.path(input_dir, paste0("grid", i, ".csv"))
+  file_out <- file.path(output_dir, paste0("grid", i, "_normalized.csv"))
+  
+  if (!file.exists(file_in)) {
+    cat(" Missing:", i, "\n")
+    next
+  }
+  
+  df <- read_csv(file_in, show_col_types = FALSE)
+  
+  df_norm <- df
+  for (col in colnames(df)) {
+    if (is.numeric(df[[col]])) {
+      df_norm[[col]] <- to_normal_quantile(df[[col]])
+    }
+  }
+  
+  write_csv(df_norm, file_out)
+  
+  cat("Done grid:", i, "\n")
+}
+
+```
+
+
+
+**Monsoon Dry**
+```{r}
+
+library(bnlearn)
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Monsoon/Normalized_Quantiles/")
+
+
+check.DJF <- -0.4912692
+
+
+cv_dir <- "DryCV_Pred"
+if (!dir.exists(cv_dir)) {
+  dir.create(cv_dir)
+}
+
+
+correlation_summary <- data.frame(Grid_Number = integer(), Correlation = numeric())
+bayes_stats_summary <- data.frame()
+
+
+for (i in 1:4487) {
+  file_normalized <- paste0("grid", i, ".csv")
+  file_actual <- paste0("../grid", i, ".csv")
+  
+
+  if (!file.exists(file_normalized) || !file.exists(file_actual)) {
+    next
+  }
+
+
+  data.Q <- read.csv(file_normalized)
+  data <- read_csv(file_actual, show_col_types = FALSE)
+
+
+  if (!("Q" %in% colnames(data))) {
+    next
+  }
+
+
+  model <- bn.fit(dag, data.Q)
+  joint <- gbn2mvnorm(model)
+
+
+  mutSST <- mutilated(model, evidence = list(SST = 0))
+  param.lower <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], Inf, 1)
+  param.upper <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], -1, -Inf)
+
+  mutSST$SST <- list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+  query.high <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q <= check.DJF), evidence = (SST > 0)))
+
+  mutSST$SST <- list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+  query.low <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q <= check.DJF), evidence = (SST < 0)))
+
+  query.high[query.high == 0] <- 1e-12
+  query.low[query.low == 0] <- 1e-12
+
+  stat1 <- data.frame(
+    num = median(query.high),
+    deno = median(query.low),
+    Bayes.factor = log10(mean(query.high) / mean(query.low)),
+    flood_threshold = check.DJF,
+    season = "JJAS Monsoon",
+    variable = "SST",
+    Grid = paste0("grid", i)
+  )
+
+  print(stat1)
+
+
+  bayes_stats_summary <- rbind(bayes_stats_summary, stat1)
+
+
+  pred_loo <- numeric(nrow(data.Q))
+  
+  for (j in 1:nrow(data.Q)) {
+    train_data <- data.Q[-j, ]
+    test_data <- data.Q[j, , drop = FALSE]
+    
+    model_loo <- bn.fit(dag, train_data)
+    pred_loo[j] <- predict(model_loo, node = 'Q', test_data, method = 'bayes-lw')
+  }
+  
+
+  Q_pred_actual <- quantile(data$Q, pnorm(pred_loo), type = 8)
+  
+
+  correlation_value <- cor(data$Q, Q_pred_actual, use = "complete.obs")
+  
+
+  cat("Grid", i, "- Correlation between observed and predicted Q:", round(correlation_value, 3), "\n")
+
+
+  cv_df <- data.frame(Q_Obs = data$Q, Q_CV = Q_pred_actual)
+  write.csv(cv_df, file = file.path(cv_dir, paste0("DryCV_Grid", i, ".csv")), row.names = FALSE)
+  
+
+  correlation_summary <- rbind(correlation_summary,
+                               data.frame(Grid_Number = i, Correlation = correlation_value))
+}
+
+
+write.csv(correlation_summary, "DryCV_Correl.csv", row.names = FALSE)
+
+
+write.csv(bayes_stats_summary, "Dry_Bayes_Factor_Grids.csv", row.names = FALSE)
+
+```
+
+
+
+
+########################################## **WET** ##################################
+##############################**precipitation and SST to streamflow Q **#############
+**Bayes Factor analysis**
+```{r}
+set.seed(123) 
+rm(list = ls(all=TRUE))  
+library(tidyverse) 
+library(lubridate)  
+library(bnlearn)  
+```
+
+**CONVERT DATA INTO NORMAL QUANTILES**
+```{r}
+NQ <- function(datain){
+  emp.cdf <- ecdf(datain)
+  ecdf.prob <- emp.cdf(datain)
+  max_datain <- max(datain) 
+  val_range <- max(datain)-min(datain) 
+  #maxrow <- which.max(datain) # row corresponding to max data
+  maxrow <- which(datain == max_datain) 
+  datain[maxrow]=-Inf
+  
+  second_max <- max(datain) 
+  diff <- max_datain - second_max 
+  second_max_prob <- max(ecdf.prob[ecdf.prob<1]) 
+  adj_prob <- second_max_prob + (diff/val_range)*(1-second_max_prob)  
+  
+
+  ecdf.prob[maxrow] <- adj_prob
+  
+  norm.quantiles <- qnorm(ecdf.prob,mean = 0, sd = 1)
+  return(norm.quantiles)
+}
+
+
+NQ_median.flow <- function(datain,median.flow){
+  if (median.flow>max(datain)){
+    return(2)
+  }
+  else{
+    datain<- c(datain,median.flow)
+    quantiles <- NQ(datain)
+    norm.quantile <- quantiles[length(quantiles)]
+    return(norm.quantile)
+  }
+}
+
+```
+
+**Estimate Truncated Normal Parameters**
+```{r}
+estimate_truncated_normal_parameters <- function(nmean, nsd, upper, lower){
+  a <- (lower-nmean)/nsd
+  b <- (upper-nmean)/nsd
+  trunc.mean = nmean + ((dnorm(a)-dnorm(b))/(pnorm(b)-pnorm(a)))*nsd
+  if (b==Inf){
+    term1 = (a*dnorm(a))/(pnorm(b)-pnorm(a))
+  }
+  if (a==-Inf){
+    term1 <- -1*(b*dnorm(b))/(pnorm(b)-pnorm(a))
+  }
+  #term1 <- (b*dnorm(b))/(pnorm(b)-pnorm(a)) + (-a*dnorm(a))/(pnorm(b)-pnorm(a))
+  term2 <- -1*((dnorm(b)-dnorm(a))/(pnorm(b)-pnorm(a)))**2
+  trunc.sd = sqrt(nsd**2 * (1+term1+term2))
+  return(list(mean = trunc.mean, sd = trunc.sd))
+}
+```
+
+
+**Define Bayesian Network Structure**
+```{r}
+dag <- model2network("[P][SST][Q|P:SST]")
+print(dag)
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Early///")
+
+
+png("Grid1BN_DAG.png", width = 1000, height = 800)
+
+
+plot(dag, 
+     main = "Bayesian Network DAG",  
+     sub = "Causal Relationships Between Variables",
+     col = "black",  
+     lwd = 2,  
+     cex.main = 1.5,  
+     cex.sub = 1.2,  
+     cex = 1.3,  
+     mar = c(5, 5, 5, 5))  
+
+
+dev.off()
+
+print("Bayesian Network DAG saved as 'Bayesian_Network_DAG.png' with improved visibility")
+
+```
+
+
+**Early Wet**
+```{r}
+
+library(bnlearn)
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Early///Normalized_Quantiles/")
+
+
+check.DJF <- 0.4912692
+
+
+cv_dir <- "WetCV_Pred"
+if (!dir.exists(cv_dir)) {
+  dir.create(cv_dir)
+}
+
+
+correlation_summary <- data.frame(Grid_Number = integer(), Correlation = numeric())
+bayes_stats_summary <- data.frame()
+
+
+for (i in 1:4487) {
+  file_normalized <- paste0("grid", i, ".csv")
+  file_actual <- paste0("../grid", i, ".csv")
+  
+
+  if (!file.exists(file_normalized) || !file.exists(file_actual)) {
+    next
+  }
+
+
+  data.Q <- read.csv(file_normalized)
+  data <- read_csv(file_actual, show_col_types = FALSE)
+
+
+  if (!("Q" %in% colnames(data))) {
+    next
+  }
+
+
+  model <- bn.fit(dag, data.Q)
+  joint <- gbn2mvnorm(model)
+
+
+  mutSST <- mutilated(model, evidence = list(SST = 0))
+  param.lower <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], Inf, 1)
+  param.upper <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], -1, -Inf)
+
+  mutSST$SST <- list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+  query.high <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.DJF), evidence = (SST > 0)))
+
+  mutSST$SST <- list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+  query.low <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.DJF), evidence = (SST < 0)))
+
+  query.high[query.high == 0] <- 1e-12
+  query.low[query.low == 0] <- 1e-12
+
+  stat1 <- data.frame(
+    num = median(query.high),
+    deno = median(query.low),
+    Bayes.factor = log10(mean(query.high) / mean(query.low)),
+    flood_threshold = check.DJF,
+    season = "JJAS Monsoon",
+    variable = "SST",
+    Grid = paste0("grid", i)
+  )
+
+  print(stat1)
+
+
+  bayes_stats_summary <- rbind(bayes_stats_summary, stat1)
+
+
+  pred_loo <- numeric(nrow(data.Q))
+  
+  for (j in 1:nrow(data.Q)) {
+    train_data <- data.Q[-j, ]
+    test_data <- data.Q[j, , drop = FALSE]
+    
+    model_loo <- bn.fit(dag, train_data)
+    pred_loo[j] <- predict(model_loo, node = 'Q', test_data, method = 'bayes-lw')
+  }
+  
+
+  Q_pred_actual <- quantile(data$Q, pnorm(pred_loo), type = 8)
+  
+
+  correlation_value <- cor(data$Q, Q_pred_actual, use = "complete.obs")
+  
+
+  cat("Grid", i, "- Correlation between observed and predicted Q:", round(correlation_value, 3), "\n")
+
+
+  cv_df <- data.frame(Q_Obs = data$Q, Q_CV = Q_pred_actual)
+  write.csv(cv_df, file = file.path(cv_dir, paste0("WetCV_Grid", i, ".csv")), row.names = FALSE)
+  
+
+  correlation_summary <- rbind(correlation_summary,
+                               data.frame(Grid_Number = i, Correlation = correlation_value))
+}
+
+
+write.csv(correlation_summary, "WetCV_Correl.csv", row.names = FALSE)
+
+
+write.csv(bayes_stats_summary, "Wet_Bayes_Factor_Grids.csv", row.names = FALSE)
+
+```
+
+
+**Peak Wet**
+```{r}
+
+library(bnlearn)
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Peak////Normalized_Quantiles/")
+
+
+check.DJF <- 0.4912692
+
+
+cv_dir <- "WetCV_Pred"
+if (!dir.exists(cv_dir)) {
+  dir.create(cv_dir)
+}
+
+
+correlation_summary <- data.frame(Grid_Number = integer(), Correlation = numeric())
+bayes_stats_summary <- data.frame()
+
+
+for (i in 1:4487) {
+  file_normalized <- paste0("grid", i, ".csv")
+  file_actual <- paste0("../grid", i, ".csv")
+  
+
+  if (!file.exists(file_normalized) || !file.exists(file_actual)) {
+    next
+  }
+
+
+  data.Q <- read.csv(file_normalized)
+  data <- read_csv(file_actual, show_col_types = FALSE)
+
+
+  if (!("Q" %in% colnames(data))) {
+    next
+  }
+
+
+  model <- bn.fit(dag, data.Q)
+  joint <- gbn2mvnorm(model)
+
+
+  mutSST <- mutilated(model, evidence = list(SST = 0))
+  param.lower <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], Inf, 1)
+  param.upper <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], -1, -Inf)
+
+  mutSST$SST <- list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+  query.high <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.DJF), evidence = (SST > 0)))
+
+  mutSST$SST <- list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+  query.low <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.DJF), evidence = (SST < 0)))
+
+  query.high[query.high == 0] <- 1e-12
+  query.low[query.low == 0] <- 1e-12
+
+  stat1 <- data.frame(
+    num = median(query.high),
+    deno = median(query.low),
+    Bayes.factor = log10(mean(query.high) / mean(query.low)),
+    flood_threshold = check.DJF,
+    season = "JJAS Monsoon",
+    variable = "SST",
+    Grid = paste0("grid", i)
+  )
+
+  print(stat1)
+
+
+  bayes_stats_summary <- rbind(bayes_stats_summary, stat1)
+
+
+  pred_loo <- numeric(nrow(data.Q))
+  
+  for (j in 1:nrow(data.Q)) {
+    train_data <- data.Q[-j, ]
+    test_data <- data.Q[j, , drop = FALSE]
+    
+    model_loo <- bn.fit(dag, train_data)
+    pred_loo[j] <- predict(model_loo, node = 'Q', test_data, method = 'bayes-lw')
+  }
+  
+
+  Q_pred_actual <- quantile(data$Q, pnorm(pred_loo), type = 8)
+  
+
+  correlation_value <- cor(data$Q, Q_pred_actual, use = "complete.obs")
+  
+
+  cat("Grid", i, "- Correlation between observed and predicted Q:", round(correlation_value, 3), "\n")
+
+
+  cv_df <- data.frame(Q_Obs = data$Q, Q_CV = Q_pred_actual)
+  write.csv(cv_df, file = file.path(cv_dir, paste0("WetCV_Grid", i, ".csv")), row.names = FALSE)
+  
+
+  correlation_summary <- rbind(correlation_summary,
+                               data.frame(Grid_Number = i, Correlation = correlation_value))
+}
+
+
+write.csv(correlation_summary, "WetCV_Correl.csv", row.names = FALSE)
+
+
+write.csv(bayes_stats_summary, "Wet_Bayes_Factor_Grids.csv", row.names = FALSE)
+
+```
+
+
+
+
+**Late Wet**
+```{r}
+
+library(bnlearn)
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Late////Normalized_Quantiles/")
+
+
+check.DJF <- 0.4912692
+
+
+cv_dir <- "WetCV_Pred"
+if (!dir.exists(cv_dir)) {
+  dir.create(cv_dir)
+}
+
+
+correlation_summary <- data.frame(Grid_Number = integer(), Correlation = numeric())
+bayes_stats_summary <- data.frame()
+
+
+for (i in 1:4487) {
+  file_normalized <- paste0("grid", i, ".csv")
+  file_actual <- paste0("../grid", i, ".csv")
+  
+
+  if (!file.exists(file_normalized) || !file.exists(file_actual)) {
+    next
+  }
+
+
+  data.Q <- read.csv(file_normalized)
+  data <- read_csv(file_actual, show_col_types = FALSE)
+
+
+  if (!("Q" %in% colnames(data))) {
+    next
+  }
+
+
+  model <- bn.fit(dag, data.Q)
+  joint <- gbn2mvnorm(model)
+
+
+  mutSST <- mutilated(model, evidence = list(SST = 0))
+  param.lower <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], Inf, 1)
+  param.upper <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], -1, -Inf)
+
+  mutSST$SST <- list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+  query.high <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.DJF), evidence = (SST > 0)))
+
+  mutSST$SST <- list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+  query.low <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.DJF), evidence = (SST < 0)))
+
+  query.high[query.high == 0] <- 1e-12
+  query.low[query.low == 0] <- 1e-12
+
+  stat1 <- data.frame(
+    num = median(query.high),
+    deno = median(query.low),
+    Bayes.factor = log10(mean(query.high) / mean(query.low)),
+    flood_threshold = check.DJF,
+    season = "JJAS Monsoon",
+    variable = "SST",
+    Grid = paste0("grid", i)
+  )
+
+  print(stat1)
+
+
+  bayes_stats_summary <- rbind(bayes_stats_summary, stat1)
+
+
+  pred_loo <- numeric(nrow(data.Q))
+  
+  for (j in 1:nrow(data.Q)) {
+    train_data <- data.Q[-j, ]
+    test_data <- data.Q[j, , drop = FALSE]
+    
+    model_loo <- bn.fit(dag, train_data)
+    pred_loo[j] <- predict(model_loo, node = 'Q', test_data, method = 'bayes-lw')
+  }
+  
+
+  Q_pred_actual <- quantile(data$Q, pnorm(pred_loo), type = 8)
+  
+
+  correlation_value <- cor(data$Q, Q_pred_actual, use = "complete.obs")
+  
+
+  cat("Grid", i, "- Correlation between observed and predicted Q:", round(correlation_value, 3), "\n")
+
+
+  cv_df <- data.frame(Q_Obs = data$Q, Q_CV = Q_pred_actual)
+  write.csv(cv_df, file = file.path(cv_dir, paste0("WetCV_Grid", i, ".csv")), row.names = FALSE)
+  
+
+  correlation_summary <- rbind(correlation_summary,
+                               data.frame(Grid_Number = i, Correlation = correlation_value))
+}
+
+
+write.csv(correlation_summary, "WetCV_Correl.csv", row.names = FALSE)
+
+
+write.csv(bayes_stats_summary, "Wet_Bayes_Factor_Grids.csv", row.names = FALSE)
+
+```
+
+
+
+
+**Monsoon Wet**
+```{r}
+
+library(bnlearn)
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Monsoon////Normalized_Quantiles/")
+
+
+check.DJF <- 0.4912692
+
+
+cv_dir <- "WetCV_Pred"
+if (!dir.exists(cv_dir)) {
+  dir.create(cv_dir)
+}
+
+
+correlation_summary <- data.frame(Grid_Number = integer(), Correlation = numeric())
+bayes_stats_summary <- data.frame()
+
+
+for (i in 1:4487) {
+  file_normalized <- paste0("grid", i, ".csv")
+  file_actual <- paste0("../grid", i, ".csv")
+  
+
+  if (!file.exists(file_normalized) || !file.exists(file_actual)) {
+    next
+  }
+
+
+  data.Q <- read.csv(file_normalized)
+  data <- read_csv(file_actual, show_col_types = FALSE)
+
+
+  if (!("Q" %in% colnames(data))) {
+    next
+  }
+
+
+  model <- bn.fit(dag, data.Q)
+  joint <- gbn2mvnorm(model)
+
+
+  mutSST <- mutilated(model, evidence = list(SST = 0))
+  param.lower <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], Inf, 1)
+  param.upper <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], -1, -Inf)
+
+  mutSST$SST <- list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+  query.high <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.DJF), evidence = (SST > 0)))
+
+  mutSST$SST <- list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+  query.low <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.DJF), evidence = (SST < 0)))
+
+  query.high[query.high == 0] <- 1e-12
+  query.low[query.low == 0] <- 1e-12
+
+  stat1 <- data.frame(
+    num = median(query.high),
+    deno = median(query.low),
+    Bayes.factor = log10(mean(query.high) / mean(query.low)),
+    flood_threshold = check.DJF,
+    season = "JJAS Monsoon",
+    variable = "SST",
+    Grid = paste0("grid", i)
+  )
+
+  print(stat1)
+
+
+  bayes_stats_summary <- rbind(bayes_stats_summary, stat1)
+
+
+  pred_loo <- numeric(nrow(data.Q))
+  
+  for (j in 1:nrow(data.Q)) {
+    train_data <- data.Q[-j, ]
+    test_data <- data.Q[j, , drop = FALSE]
+    
+    model_loo <- bn.fit(dag, train_data)
+    pred_loo[j] <- predict(model_loo, node = 'Q', test_data, method = 'bayes-lw')
+  }
+  
+
+  Q_pred_actual <- quantile(data$Q, pnorm(pred_loo), type = 8)
+  
+
+  correlation_value <- cor(data$Q, Q_pred_actual, use = "complete.obs")
+  
+
+  cat("Grid", i, "- Correlation between observed and predicted Q:", round(correlation_value, 3), "\n")
+
+
+  cv_df <- data.frame(Q_Obs = data$Q, Q_CV = Q_pred_actual)
+  write.csv(cv_df, file = file.path(cv_dir, paste0("WetCV_Grid", i, ".csv")), row.names = FALSE)
+  
+
+  correlation_summary <- rbind(correlation_summary,
+                               data.frame(Grid_Number = i, Correlation = correlation_value))
+}
+
+
+write.csv(correlation_summary, "WetCV_Correl.csv", row.names = FALSE)
+
+
+write.csv(bayes_stats_summary, "Wet_Bayes_Factor_Grids.csv", row.names = FALSE)
+
+```
+
+
+
+
+
+########################################## **Normal** ##################################
+##############################**Precipitation and SST to streamflow Q**#############
+**Bayes Factor analysis**
+```{r}
+set.seed(123) 
+rm(list = ls(all=TRUE))  
+library(tidyverse) 
+library(lubridate)  
+library(bnlearn)  
+```
+
+**CONVERT DATA INTO NORMAL QUANTILES**
+```{r}
+NQ <- function(datain){
+  emp.cdf <- ecdf(datain)
+  ecdf.prob <- emp.cdf(datain)
+  max_datain <- max(datain) 
+  val_range <- max(datain)-min(datain) 
+  #maxrow <- which.max(datain) # row corresponding to max data
+  maxrow <- which(datain == max_datain) 
+  datain[maxrow]=-Inf
+  
+  second_max <- max(datain) 
+  diff <- max_datain - second_max 
+  second_max_prob <- max(ecdf.prob[ecdf.prob<1]) 
+  adj_prob <- second_max_prob + (diff/val_range)*(1-second_max_prob)  
+  
+
+  ecdf.prob[maxrow] <- adj_prob
+  
+  norm.quantiles <- qnorm(ecdf.prob,mean = 0, sd = 1)
+  return(norm.quantiles)
+}
+
+
+NQ_median.flow <- function(datain,median.flow){
+  if (median.flow>max(datain)){
+    return(2)
+  }
+  else{
+    datain<- c(datain,median.flow)
+    quantiles <- NQ(datain)
+    norm.quantile <- quantiles[length(quantiles)]
+    return(norm.quantile)
+  }
+}
+
+```
+
+**Estimate Truncated Normal Parameters**
+```{r}
+estimate_truncated_normal_parameters <- function(nmean, nsd, upper, lower){
+  a <- (lower-nmean)/nsd
+  b <- (upper-nmean)/nsd
+  trunc.mean = nmean + ((dnorm(a)-dnorm(b))/(pnorm(b)-pnorm(a)))*nsd
+  if (b==Inf){
+    term1 = (a*dnorm(a))/(pnorm(b)-pnorm(a))
+  }
+  if (a==-Inf){
+    term1 <- -1*(b*dnorm(b))/(pnorm(b)-pnorm(a))
+  }
+  #term1 <- (b*dnorm(b))/(pnorm(b)-pnorm(a)) + (-a*dnorm(a))/(pnorm(b)-pnorm(a))
+  term2 <- -1*((dnorm(b)-dnorm(a))/(pnorm(b)-pnorm(a)))**2
+  trunc.sd = sqrt(nsd**2 * (1+term1+term2))
+  return(list(mean = trunc.mean, sd = trunc.sd))
+}
+```
+
+
+**Define Bayesian Network Structure**
+```{r}
+dag <- model2network("[P][SST][Q|P:SST]")
+print(dag)
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Early")
+
+
+png("Grid1BN_DAG.png", width = 1000, height = 800)
+
+
+plot(dag, 
+     main = "Bayesian Network DAG",  
+     sub = "Causal Relationships Between Variables",
+     col = "black",  
+     lwd = 2,  
+     cex.main = 1.5,  
+     cex.sub = 1.2,  
+     cex = 1.3,  
+     mar = c(5, 5, 5, 5))  
+
+
+dev.off()
+
+print("Bayesian Network DAG saved as 'Bayesian_Network_DAG.png' with improved visibility")
+
+```
+
+
+**Early Normal**
+```{r}
+
+library(bnlearn)
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Early/Normalized_Quantiles/")
+
+# Define normal range thresholds
+check.lower <- -0.4912692
+check.upper <-  0.4912692
+
+
+cv_dir <- "NormalCV_Pred"
+if (!dir.exists(cv_dir)) {
+  dir.create(cv_dir)
+}
+
+
+correlation_summary <- data.frame(Grid_Number = integer(), Correlation = numeric())
+bayes_stats_summary <- data.frame()
+
+# Loop over all grid files (adjust range if not 4487)
+for (i in 1:4487) {
+  file_normalized <- paste0("grid", i, "_normalized.csv")
+  file_actual <- paste0("../grid", i, ".csv")
+  
+
+  if (!file.exists(file_normalized) || !file.exists(file_actual)) {
+    next
+  }
+
+
+  data.Q <- read.csv(file_normalized)
+  data <- read_csv(file_actual, show_col_types = FALSE)
+
+
+  if (!("Q" %in% colnames(data))) {
+    next
+  }
+
+
+  model <- bn.fit(dag, data.Q)
+  joint <- gbn2mvnorm(model)
+
+
+  mutSST <- mutilated(model, evidence = list(SST = 0))
+  param.lower <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], Inf, 1)
+  param.upper <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], -1, -Inf)
+
+  mutSST$SST <- list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+  query.high <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.lower & Q <= check.upper), evidence = (SST > 0)))
+
+  mutSST$SST <- list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+  query.low <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.lower & Q <= check.upper), evidence = (SST < 0)))
+
+  query.high[query.high == 0] <- 1e-12
+  query.low[query.low == 0] <- 1e-12
+
+  stat1 <- data.frame(
+    num = median(query.high),
+    deno = median(query.low),
+    Bayes.factor = log10(mean(query.high) / mean(query.low)),
+    lower = check.lower,
+    upper = check.upper,
+    season = "JJAS Monsoon",
+    variable = "SST",
+    Grid = paste0("grid", i)
+  )
+
+  print(stat1)
+
+
+  bayes_stats_summary <- rbind(bayes_stats_summary, stat1)
+
+
+  pred_loo <- numeric(nrow(data.Q))
+  
+  for (j in 1:nrow(data.Q)) {
+    train_data <- data.Q[-j, ]
+    test_data <- data.Q[j, , drop = FALSE]
+    
+    model_loo <- bn.fit(dag, train_data)
+    pred_loo[j] <- predict(model_loo, node = 'Q', test_data, method = 'bayes-lw')
+  }
+  
+
+  Q_pred_actual <- quantile(data$Q, pnorm(pred_loo), type = 8)
+  
+
+  correlation_value <- cor(data$Q, Q_pred_actual, use = "complete.obs")
+  
+
+  cat("Grid", i, "- Correlation between observed and predicted Q:", round(correlation_value, 3), "\n")
+
+
+  cv_df <- data.frame(Q_Obs = data$Q, Q_CV = Q_pred_actual)
+  write.csv(cv_df, file = file.path(cv_dir, paste0("NormalCV_Grid", i, ".csv")), row.names = FALSE)
+  
+
+  correlation_summary <- rbind(correlation_summary,
+                               data.frame(Grid_Number = i, Correlation = correlation_value))
+}
+
+
+write.csv(correlation_summary, "NormalCV_Correl.csv", row.names = FALSE)
+
+
+write.csv(bayes_stats_summary, "Normal_Bayes_Factor_Grids.csv", row.names = FALSE)
+
+```
+
+
+**Peak Normal**
+```{r}
+
+library(bnlearn)
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Peak//Normalized_Quantiles/")
+
+# Define normal range thresholds
+check.lower <- -0.4912692
+check.upper <-  0.4912692
+
+
+cv_dir <- "NormalCV_Pred"
+if (!dir.exists(cv_dir)) {
+  dir.create(cv_dir)
+}
+
+
+correlation_summary <- data.frame(Grid_Number = integer(), Correlation = numeric())
+bayes_stats_summary <- data.frame()
+
+# Loop over all grid files (adjust range if not 4487)
+for (i in 1:4487) {
+  file_normalized <- paste0("grid", i, "_normalized.csv")
+  file_actual <- paste0("../grid", i, ".csv")
+  
+
+  if (!file.exists(file_normalized) || !file.exists(file_actual)) {
+    next
+  }
+
+
+  data.Q <- read.csv(file_normalized)
+  data <- read_csv(file_actual, show_col_types = FALSE)
+
+
+  if (!("Q" %in% colnames(data))) {
+    next
+  }
+
+
+  model <- bn.fit(dag, data.Q)
+  joint <- gbn2mvnorm(model)
+
+
+  mutSST <- mutilated(model, evidence = list(SST = 0))
+  param.lower <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], Inf, 1)
+  param.upper <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], -1, -Inf)
+
+  mutSST$SST <- list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+  query.high <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.lower & Q <= check.upper), evidence = (SST > 0)))
+
+  mutSST$SST <- list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+  query.low <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.lower & Q <= check.upper), evidence = (SST < 0)))
+
+  query.high[query.high == 0] <- 1e-12
+  query.low[query.low == 0] <- 1e-12
+
+  stat1 <- data.frame(
+    num = median(query.high),
+    deno = median(query.low),
+    Bayes.factor = log10(mean(query.high) / mean(query.low)),
+    lower = check.lower,
+    upper = check.upper,
+    season = "JJAS Monsoon",
+    variable = "SST",
+    Grid = paste0("grid", i)
+  )
+
+  print(stat1)
+
+
+  bayes_stats_summary <- rbind(bayes_stats_summary, stat1)
+
+
+  pred_loo <- numeric(nrow(data.Q))
+  
+  for (j in 1:nrow(data.Q)) {
+    train_data <- data.Q[-j, ]
+    test_data <- data.Q[j, , drop = FALSE]
+    
+    model_loo <- bn.fit(dag, train_data)
+    pred_loo[j] <- predict(model_loo, node = 'Q', test_data, method = 'bayes-lw')
+  }
+  
+
+  Q_pred_actual <- quantile(data$Q, pnorm(pred_loo), type = 8)
+  
+
+  correlation_value <- cor(data$Q, Q_pred_actual, use = "complete.obs")
+  
+
+  cat("Grid", i, "- Correlation between observed and predicted Q:", round(correlation_value, 3), "\n")
+
+
+  cv_df <- data.frame(Q_Obs = data$Q, Q_CV = Q_pred_actual)
+  write.csv(cv_df, file = file.path(cv_dir, paste0("NormalCV_Grid", i, ".csv")), row.names = FALSE)
+  
+
+  correlation_summary <- rbind(correlation_summary,
+                               data.frame(Grid_Number = i, Correlation = correlation_value))
+}
+
+
+write.csv(correlation_summary, "NormalCV_Correl.csv", row.names = FALSE)
+
+
+write.csv(bayes_stats_summary, "Normal_Bayes_Factor_Grids.csv", row.names = FALSE)
+
+```
+
+
+
+
+**Late Normal**
+```{r}
+
+library(bnlearn)
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Late//Normalized_Quantiles/")
+
+# Define normal range thresholds
+check.lower <- -0.4912692
+check.upper <-  0.4912692
+
+
+cv_dir <- "NormalCV_Pred"
+if (!dir.exists(cv_dir)) {
+  dir.create(cv_dir)
+}
+
+
+correlation_summary <- data.frame(Grid_Number = integer(), Correlation = numeric())
+bayes_stats_summary <- data.frame()
+
+# Loop over all grid files (adjust range if not 4487)
+for (i in 1:4487) {
+  file_normalized <- paste0("grid", i, "_normalized.csv")
+  file_actual <- paste0("../grid", i, ".csv")
+  
+
+  if (!file.exists(file_normalized) || !file.exists(file_actual)) {
+    next
+  }
+
+
+  data.Q <- read.csv(file_normalized)
+  data <- read_csv(file_actual, show_col_types = FALSE)
+
+
+  if (!("Q" %in% colnames(data))) {
+    next
+  }
+
+
+  model <- bn.fit(dag, data.Q)
+  joint <- gbn2mvnorm(model)
+
+
+  mutSST <- mutilated(model, evidence = list(SST = 0))
+  param.lower <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], Inf, 1)
+  param.upper <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], -1, -Inf)
+
+  mutSST$SST <- list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+  query.high <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.lower & Q <= check.upper), evidence = (SST > 0)))
+
+  mutSST$SST <- list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+  query.low <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.lower & Q <= check.upper), evidence = (SST < 0)))
+
+  query.high[query.high == 0] <- 1e-12
+  query.low[query.low == 0] <- 1e-12
+
+  stat1 <- data.frame(
+    num = median(query.high),
+    deno = median(query.low),
+    Bayes.factor = log10(mean(query.high) / mean(query.low)),
+    lower = check.lower,
+    upper = check.upper,
+    season = "JJAS Monsoon",
+    variable = "SST",
+    Grid = paste0("grid", i)
+  )
+
+  print(stat1)
+
+
+  bayes_stats_summary <- rbind(bayes_stats_summary, stat1)
+
+
+  pred_loo <- numeric(nrow(data.Q))
+  
+  for (j in 1:nrow(data.Q)) {
+    train_data <- data.Q[-j, ]
+    test_data <- data.Q[j, , drop = FALSE]
+    
+    model_loo <- bn.fit(dag, train_data)
+    pred_loo[j] <- predict(model_loo, node = 'Q', test_data, method = 'bayes-lw')
+  }
+  
+
+  Q_pred_actual <- quantile(data$Q, pnorm(pred_loo), type = 8)
+  
+
+  correlation_value <- cor(data$Q, Q_pred_actual, use = "complete.obs")
+  
+
+  cat("Grid", i, "- Correlation between observed and predicted Q:", round(correlation_value, 3), "\n")
+
+
+  cv_df <- data.frame(Q_Obs = data$Q, Q_CV = Q_pred_actual)
+  write.csv(cv_df, file = file.path(cv_dir, paste0("NormalCV_Grid", i, ".csv")), row.names = FALSE)
+  
+
+  correlation_summary <- rbind(correlation_summary,
+                               data.frame(Grid_Number = i, Correlation = correlation_value))
+}
+
+
+write.csv(correlation_summary, "NormalCV_Correl.csv", row.names = FALSE)
+
+
+write.csv(bayes_stats_summary, "Normal_Bayes_Factor_Grids.csv", row.names = FALSE)
+
+```
+
+
+
+
+**Monsoon Normal**
+```{r}
+
+library(bnlearn)
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Monsoon//Normalized_Quantiles/")
+
+# Define normal range thresholds
+check.lower <- -0.4912692
+check.upper <-  0.4912692
+
+
+cv_dir <- "NormalCV_Pred"
+if (!dir.exists(cv_dir)) {
+  dir.create(cv_dir)
+}
+
+
+correlation_summary <- data.frame(Grid_Number = integer(), Correlation = numeric())
+bayes_stats_summary <- data.frame()
+
+# Loop over all grid files (adjust range if not 4487)
+for (i in 1:4487) {
+  file_normalized <- paste0("grid", i, "_normalized.csv")
+  file_actual <- paste0("../grid", i, ".csv")
+  
+
+  if (!file.exists(file_normalized) || !file.exists(file_actual)) {
+    next
+  }
+
+
+  data.Q <- read.csv(file_normalized)
+  data <- read_csv(file_actual, show_col_types = FALSE)
+
+
+  if (!("Q" %in% colnames(data))) {
+    next
+  }
+
+
+  model <- bn.fit(dag, data.Q)
+  joint <- gbn2mvnorm(model)
+
+
+  mutSST <- mutilated(model, evidence = list(SST = 0))
+  param.lower <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], Inf, 1)
+  param.upper <- estimate_truncated_normal_parameters(joint$mu["SST"], joint$sigma["SST", "SST"], -1, -Inf)
+
+  mutSST$SST <- list(coef = param.lower$mean[[1]], sd = param.lower$sd[[1]])
+  query.high <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.lower & Q <= check.upper), evidence = (SST > 0)))
+
+  mutSST$SST <- list(coef = param.upper$mean[[1]], sd = param.upper$sd[[1]])
+  query.low <- sapply(1:1000, function(q) cpquery(mutSST, event = (Q >= check.lower & Q <= check.upper), evidence = (SST < 0)))
+
+  query.high[query.high == 0] <- 1e-12
+  query.low[query.low == 0] <- 1e-12
+
+  stat1 <- data.frame(
+    num = median(query.high),
+    deno = median(query.low),
+    Bayes.factor = log10(mean(query.high) / mean(query.low)),
+    lower = check.lower,
+    upper = check.upper,
+    season = "JJAS Monsoon",
+    variable = "SST",
+    Grid = paste0("grid", i)
+  )
+
+  print(stat1)
+
+
+  bayes_stats_summary <- rbind(bayes_stats_summary, stat1)
+
+
+  pred_loo <- numeric(nrow(data.Q))
+  
+  for (j in 1:nrow(data.Q)) {
+    train_data <- data.Q[-j, ]
+    test_data <- data.Q[j, , drop = FALSE]
+    
+    model_loo <- bn.fit(dag, train_data)
+    pred_loo[j] <- predict(model_loo, node = 'Q', test_data, method = 'bayes-lw')
+  }
+  
+
+  Q_pred_actual <- quantile(data$Q, pnorm(pred_loo), type = 8)
+  
+
+  correlation_value <- cor(data$Q, Q_pred_actual, use = "complete.obs")
+  
+
+  cat("Grid", i, "- Correlation between observed and predicted Q:", round(correlation_value, 3), "\n")
+
+
+  cv_df <- data.frame(Q_Obs = data$Q, Q_CV = Q_pred_actual)
+  write.csv(cv_df, file = file.path(cv_dir, paste0("NormalCV_Grid", i, ".csv")), row.names = FALSE)
+  
+
+  correlation_summary <- rbind(correlation_summary,
+                               data.frame(Grid_Number = i, Correlation = correlation_value))
+}
+
+
+write.csv(correlation_summary, "NormalCV_Correl.csv", row.names = FALSE)
+
+
+write.csv(bayes_stats_summary, "Normal_Bayes_Factor_Grids.csv", row.names = FALSE)
+
+```
+
+
+
+
+**get the correlation between sst and streamflow**
+
+```{r}
+library(readr)
+library(dplyr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P//Early////")
+
+correlation_results <- data.frame(
+  Grid_Number = integer(),
+  Corr_SST_P = numeric(),
+  Corr_SST_Q = numeric(),
+  Corr_Q_P = numeric()
+)
+
+for (i in 1:4487) {
+  file_name <- paste0("grid", i, ".csv")
+  
+  if (file.exists(file_name)) {
+    data <- read_csv(file_name, show_col_types = FALSE)
+    
+    required_cols <- c("SST", "P", "Q")
+    if (all(required_cols %in% names(data))) {
+      
+      corr_vals <- c(
+        cor(data$SST, data$P, use = "complete.obs"),
+        cor(data$SST, data$Q, use = "complete.obs"),
+        cor(data$Q, data$P, use = "complete.obs")
+      )
+      
+      correlation_results <- rbind(correlation_results, 
+                                   data.frame(Grid_Number = i,
+                                              Corr_SST_P = corr_vals[1],
+                                              Corr_SST_Q = corr_vals[2],
+                                              Corr_Q_P = corr_vals[3]))
+    } else {
+      cat("Skipping grid", i, ": Missing required columns\n")
+    }
+  } else {
+    cat("File missing:", file_name, "\n")
+  }
+}
+
+write_csv(correlation_results, "Corre_Grid_PQ.csv")
+
+cat("Done! Total grids processed:", nrow(correlation_results), "\n")
+
+
+
+
+
+
+
+library(readr)
+library(dplyr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Peak/////")
+
+
+correlation_results <- data.frame(
+  Grid_Number = integer(),
+  Corr_SST_P = numeric(),
+  Corr_SST_Q = numeric(),
+  Corr_Q_P = numeric()
+)
+
+
+for (i in 1:4487) {
+  file_name <- paste0("grid", i, ".csv")
+  
+
+  if (file.exists(file_name)) {
+
+    data <- read_csv(file_name, show_col_types = FALSE)
+    
+
+    required_cols <- c("SST", "P", "Q")
+    if (all(required_cols %in% names(data))) {
+      
+
+      corr_vals <- c(
+        cor(data$SST, data$P, use = "complete.obs"),
+        cor(data$SST, data$Q, use = "complete.obs"),
+        cor(data$Q, data$P, use = "complete.obs")
+      )
+      
+
+      correlation_results <- rbind(correlation_results, 
+                                   data.frame(Grid_Number = i,
+                                              Corr_SST_P = corr_vals[1],
+                                              Corr_SST_Q = corr_vals[2],
+                                              Corr_Q_P = corr_vals[3]))
+    } else {
+      cat("Skipping grid", i, ": Missing required columns\n")
+    }
+  } else {
+    cat("File missing:", file_name, "\n")
+  }
+}
+
+
+write_csv(correlation_results, "Corre_Grid_PQ.csv")
+
+cat("Done! Total grids processed:", nrow(correlation_results), "\n")
+
+
+
+
+
+
+
+library(readr)
+library(dplyr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Late/////")
+
+
+correlation_results <- data.frame(
+  Grid_Number = integer(),
+  Corr_SST_P = numeric(),
+  Corr_SST_Q = numeric(),
+  Corr_Q_P = numeric()
+)
+
+
+for (i in 1:4487) {
+  file_name <- paste0("grid", i, ".csv")
+  
+
+  if (file.exists(file_name)) {
+
+    data <- read_csv(file_name, show_col_types = FALSE)
+    
+
+    required_cols <- c("SST", "P", "Q")
+    if (all(required_cols %in% names(data))) {
+      
+
+      corr_vals <- c(
+        cor(data$SST, data$P, use = "complete.obs"),
+        cor(data$SST, data$Q, use = "complete.obs"),
+        cor(data$Q, data$P, use = "complete.obs")
+      )
+      
+
+      correlation_results <- rbind(correlation_results, 
+                                   data.frame(Grid_Number = i,
+                                              Corr_SST_P = corr_vals[1],
+                                              Corr_SST_Q = corr_vals[2],
+                                              Corr_Q_P = corr_vals[3]))
+    } else {
+      cat("Skipping grid", i, ": Missing required columns\n")
+    }
+  } else {
+    cat("File missing:", file_name, "\n")
+  }
+}
+
+
+write_csv(correlation_results, "Corre_Grid_PQ.csv")
+
+cat("Done! Total grids processed:", nrow(correlation_results), "\n")
+
+
+
+
+
+
+library(readr)
+library(dplyr)
+
+
+setwd("/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/Monsoon/////")
+
+
+correlation_results <- data.frame(
+  Grid_Number = integer(),
+  Corr_SST_P = numeric(),
+  Corr_SST_Q = numeric(),
+  Corr_Q_P = numeric()
+)
+
+
+for (i in 1:4487) {
+  file_name <- paste0("grid", i, ".csv")
+  
+
+  if (file.exists(file_name)) {
+
+    data <- read_csv(file_name, show_col_types = FALSE)
+    
+
+    required_cols <- c("SST", "P", "Q")
+    if (all(required_cols %in% names(data))) {
+      
+
+      corr_vals <- c(
+        cor(data$SST, data$P, use = "complete.obs"),
+        cor(data$SST, data$Q, use = "complete.obs"),
+        cor(data$Q, data$P, use = "complete.obs")
+      )
+      
+
+      correlation_results <- rbind(correlation_results, 
+                                   data.frame(Grid_Number = i,
+                                              Corr_SST_P = corr_vals[1],
+                                              Corr_SST_Q = corr_vals[2],
+                                              Corr_Q_P = corr_vals[3]))
+    } else {
+      cat("Skipping grid", i, ": Missing required columns\n")
+    }
+  } else {
+    cat("File missing:", file_name, "\n")
+  }
+}
+
+
+write_csv(correlation_results, "Corre_Grid_PQ.csv")
+
+cat("Done! Total grids processed:", nrow(correlation_results), "\n")
+
+
+```
+
+
+
+
+**merge the data: bayes factor correlation into single csv file**
+```{r}
+
+library(dplyr)
+library(readr)
+
+setwd("D:/Onedrive_data/Tom_Flow_Bahad/Causality_Inferences/Index_Anomalies/NanBal_June11_Meet/With_Antecedent_SST/Early/SST_Grid_Extracted_Files/Normalized_Quantiles")
+
+bf_data <- read_csv("Wet_Bayes_Factor_Grids.csv") %>%
+  select(Grid, Bayes.factor)
+
+cor_data <- read_csv("WetCV_Correl.csv")
+
+grid_index <- read_csv("D:/Onedrive_data/Tom_Flow_Bahad/Causality_Inferences/Index_Anomalies/NanBal_June11_Meet/With_Antecedent_SST/grid_index.csv")
+
+corr_sstpq <- read_csv("D:/Onedrive_data/Tom_Flow_Bahad/Causality_Inferences/Index_Anomalies/NanBal_June11_Meet/With_Antecedent_SST/Early/SST_Grid_Extracted_Files/Corre_Grid_PQ.csv")
+
+merged_bf <- left_join(grid_index, bf_data, by = "Grid")
+
+merged_corr <- left_join(merged_bf, cor_data, by = "Grid_Number")
+
+final_data <- left_join(merged_corr, corr_sstpq, by = "Grid_Number")
+
+final_data <- final_data %>%
+  select(Lat, Lon, Grid, Grid_Number, Bayes.factor, Correlation,
+         Corr_ASST_P,Corr_SST_P,Corr_ASST_Q,Corr_SST_Q,Corr_Q_P,Corr_ASST_SST)
+
+write_csv(final_data, "Wet_combined_BF_Corr.csv")
+
+
+```
+
+
+**plot bayesfactor for wet dry normal 4*3 grid**
+```{r}
+
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+library(maps)
+library(sf)
+library(grid)
+
+base_path <- "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Bayes_Factor/Yearly_Gridded_SST_Q_P/"
+seasons   <- c("Early","Peak","Late","Monsoon")
+lon_win   <- c(30, 300)
+lat_win   <- c(-15, 25)
+
+fix_lon <- function(x) ifelse(x < 0, x + 360, x)
+
+
+world2_map <- map_data("world2")
+
+india_boundary <- st_read(
+    "/Volumes/Naman_Exter/Tom_Stage_Data/Paper_final_data/Data/Shapefiles/India_Shape_File/India_Country_Boundary.shp",
+    quiet = TRUE
+) |>
+    st_transform(4326) |>
+    st_wrap_dateline(options = c("WRAPDATELINE=YES","DATELINEOFFSET=180")) |>
+    st_shift_longitude()
+
+india_boundary_df <- india_boundary |>
+    st_cast("MULTIPOLYGON") |> st_cast("POLYGON") |>
+    mutate(id = row_number()) |>
+    st_cast("LINESTRING") |>
+    st_coordinates() |>
+    as.data.frame() |>
+    rename(lon = X, lat = Y) |>
+    mutate(group = L1, lon = fix_lon(lon))
+
+
+read_condition_data <- function(condition, base_path, seasons) {
+    read_season <- function(season){
+        path <- file.path(base_path, season, "Normalized_Quantiles")
+        fp   <- file.path(path, paste0(condition, "_Bayes_Factor_Grids.csv"))
+        if (!file.exists(fp)) return(NULL)
+        read.csv(fp) |>
+            dplyr::select(Lat, Lon, Grid,  Bayes.factor) |>
+            dplyr::mutate(Condition = condition, Phase = season)
+    }
+    df <- purrr::map_dfr(seasons, read_season)
+    if (nrow(df) == 0) stop("No files found for condition = ", condition)
+    df |>
+        dplyr::mutate(
+            Phase = factor(Phase, levels = seasons),
+            lon   = fix_lon(Lon),
+            lat   = Lat
+        )
+}
+
+get_season_df <- function(df, season) df %>% dplyr::filter(Phase == season)
+
+# Single panel builder with conditional axis display
+make_bf_panel_one <- function(df_one, show_lat_axis = FALSE, show_lon_axis = FALSE, panel_letter = NULL) {
+    p <- ggplot() +
+        geom_raster(data = df_one, aes(x = lon, y = lat, fill = Bayes.factor)) +
+        scale_fill_gradient2(low = "blue", mid = "white", high = "red",
+                             midpoint = 0, limits = c(-2, 2), name = "Bayes Factor") +
+        geom_polygon(data = world2_map, aes(long, lat, group = group),
+                     fill = "gray90", color = "gray40", linewidth = 0.25) +
+        geom_path(data = india_boundary_df, aes(lon, lat, group = group),
+                  color = "darkgreen", linewidth = 0.5) +
+        geom_point(data = df_one %>% dplyr::filter(Bayes.factor >  1),
+                   aes(lon, lat), shape = 4, color = "darkred", size = 1.4, stroke = 1.0) +
+        geom_point(data = df_one %>% dplyr::filter(Bayes.factor >= 0.5, Bayes.factor <  1),
+                   aes(lon, lat), shape = 4, color = "coral2", size = 1.4, stroke = 1.0) +
+        geom_point(data = df_one %>% dplyr::filter(Bayes.factor <= -0.5, Bayes.factor > -1),
+                   aes(lon, lat), shape = 4, color = "purple",  size = 1.4, stroke = 1.0) +
+        geom_point(data = df_one %>% dplyr::filter(Bayes.factor < -1),
+                   aes(lon, lat), shape = 4, color = "blue",    size = 1.4, stroke = 1.0) +
+        coord_cartesian(xlim = lon_win, ylim = lat_win, expand = FALSE) +
+        theme_minimal(base_size = 12) +
+        theme(
+            panel.border  = element_rect(color = "black", fill = NA, linewidth = 2.0),
+            panel.grid    = element_line(size = 0.2),
+            legend.position = "none",
+            plot.margin = margin(2, 2, 2, 2, "mm")
+        ) +
+        annotate("text",
+                 x = lon_win[1] + 2, y = lat_win[1] + 1.5,
+                 label = panel_letter, fontface = "bold", size = 7, color = "red",
+                 hjust = 0, vjust = 0)
+    
+    if (show_lat_axis && show_lon_axis) {
+        p <- p +
+            scale_x_continuous(breaks = seq(60, 300, 60), name = "Longitude") +
+            scale_y_continuous(breaks = seq(-10, 20, 10), name = "Latitude") +
+            theme(axis.title = element_text(size = 20, face = "bold"),
+                  axis.text = element_text(size = 16, face = "bold"),
+                  axis.ticks = element_line())
+    } else if (show_lat_axis) {
+        p <- p +
+            scale_x_continuous(breaks = seq(60, 300, 60)) +
+            scale_y_continuous(breaks = seq(-10, 20, 10), name = "Latitude") +
+            theme(axis.title.x = element_blank(),
+                  axis.title.y = element_text(size = 20, face = "bold"),
+                  axis.text.x = element_blank(),
+                  axis.text.y = element_text(size = 16, face = "bold"),
+                  axis.ticks.x = element_blank(),
+                  axis.ticks.y = element_line())
+    } else if (show_lon_axis) {
+        p <- p +
+            scale_x_continuous(breaks = seq(60, 300, 60), name = "Longitude") +
+            scale_y_continuous(breaks = seq(-10, 20, 10)) +
+            theme(axis.title.x = element_text(size = 20, face = "bold"),
+                  axis.title.y = element_blank(),
+                  axis.text.x = element_text(size = 16, face = "bold"),
+                  axis.text.y = element_blank(),
+                  axis.ticks.x = element_line(),
+                  axis.ticks.y = element_blank())
+    } else {
+        # No axes (for internal panels)
+        p <- p +
+            scale_x_continuous(breaks = seq(60, 300, 60)) +
+            scale_y_continuous(breaks = seq(-10, 20, 10)) +
+            theme(axis.title = element_blank(),
+                  axis.text = element_blank(),
+                  axis.ticks = element_blank())
+    }
+    
+    return(p)
+}
+
+
+Dry <- read_condition_data("Dry", base_path, seasons)
+Normal <- read_condition_data("Normal", base_path, seasons)
+Wet <- read_condition_data("Wet", base_path, seasons)
+
+
+panels <- vector("list", 12)
+letters_vec <- c("(a)", "(b)", "(c)", "(d)", "(e)", "(f)", 
+                 "(g)", "(h)", "(i)", "(j)", "(k)", "(l)")
+
+for (i in seq_along(seasons)) {
+    s <- seasons[i]
+    dfL <- get_season_df(Dry, s)
+    dfM <- get_season_df(Normal, s)
+    dfR <- get_season_df(Wet, s)
+    
+    #
+    show_lat_left <- TRUE  
+    show_lon_left <- (s == "Monsoon")  
+    show_lon_middle <- (s == "Monsoon")  
+    show_lon_right <- (s == "Monsoon") 
+    
+    pL <- make_bf_panel_one(dfL, 
+                            show_lat_axis = show_lat_left, 
+                            show_lon_axis = show_lon_left,
+                            panel_letter = letters_vec[(i-1)*3 + 1])
+    
+    pM <- make_bf_panel_one(dfM, 
+                            show_lat_axis = (i == 1),  
+                            show_lon_axis = show_lon_middle,
+                            panel_letter = letters_vec[(i-1)*3 + 2])
+    
+    pR <- make_bf_panel_one(dfR, 
+                            show_lat_axis = FALSE, 
+                            show_lon_axis = show_lon_right,
+                            panel_letter = letters_vec[(i-1)*3 + 3])
+    
+    panels[[(i-1)*3 + 1]] <- pL
+    panels[[(i-1)*3 + 2]] <- pM
+    panels[[(i-1)*3 + 3]] <- pR
+}
+
+legend_plot <- ggplot() +
+    geom_raster(data = Dry %>% filter(Phase == "Early"), 
+                aes(x = lon, y = lat, fill = Bayes.factor)) +
+    scale_fill_gradient2(low = "blue", mid = "white", high = "red",
+                         midpoint = 0, limits = c(-2, 2), 
+                         name = NULL,  
+                         guide = guide_colorbar(
+                             title.position = "top",
+                             title.hjust = 0,
+                             title.vjust = 0.5,
+                             label.position = "bottom",
+                             barwidth = unit(4.0, "cm"),
+                             barheight = unit(0.8, "cm"),
+                             direction = "horizontal"
+                         )) +
+    labs(fill = NULL) +
+    theme(legend.position = "bottom",
+          legend.text = element_text(size = 16, face = "bold"),
+          legend.title = element_text(size = 18, face = "bold", hjust = 0, margin = margin(b = 10)),
+          legend.box = "horizontal",
+          legend.direction = "horizontal")
+
+
+legend_grob <- ggplotGrob(
+    ggplot() +
+        geom_raster(data = Dry %>% filter(Phase == "Early"), 
+                    aes(x = lon, y = lat, fill = Bayes.factor)) +
+        scale_fill_gradient2(low = "blue", mid = "white", high = "red",
+                             midpoint = 0, limits = c(-2, 2)) +
+        theme(legend.position = "bottom",
+              legend.title = element_text(size = 18, face = "bold", hjust = 0),
+              legend.text = element_text(size = 16, face = "bold")) +
+        guides(fill = guide_colorbar(
+            title = "Bayes Factor",
+            title.position = "top",
+            title.hjust = 0,
+            label.position = "bottom",
+            barwidth = unit(15, "cm"),  
+            barheight = unit(0.8, "cm")
+        ))
+)$grobs[[which(sapply(ggplotGrob(
+    ggplot() +
+        geom_raster(data = Dry %>% filter(Phase == "Early"), 
+                    aes(x = lon, y = lat, fill = Bayes.factor)) +
+        scale_fill_gradient2(low = "blue", mid = "white", high = "red",
+                             midpoint = 0, limits = c(-2, 2)) +
+        theme(legend.position = "bottom") +
+        guides(fill = guide_colorbar(title = "Bayes Factor"))
+)$grobs, function(x) x$name) == "guide-box")]]
+
+grid_3x4 <- cowplot::plot_grid(plotlist = panels, ncol = 3, align = 'hv')
+
+col_titles <- cowplot::plot_grid(
+    ggdraw() + draw_label("Dry", fontface = "bold", size = 30, hjust = 0.5),
+    ggdraw() + draw_label("Normal", fontface = "bold", size = 30, hjust = 0.5),
+    ggdraw() + draw_label("Wet", fontface = "bold", size = 30, hjust = 0.5),
+    ncol = 3, rel_widths = c(1, 1, 1)
+)
+
+season_labels <- cowplot::plot_grid(
+    ggdraw() + draw_label("Early",   fontface = "bold", size = 30, angle = 270, vjust = 0.5, hjust = 0.5),
+    ggdraw() + draw_label("Peak",    fontface = "bold", size = 30, angle = 270, vjust = 0.5, hjust = 0.5),
+    ggdraw() + draw_label("Late",    fontface = "bold", size = 30, angle = 270, vjust = 0.5, hjust = 0.5),
+    ggdraw() + draw_label("Monsoon", fontface = "bold", size = 30, angle = 270, vjust = 0.5, hjust = 0.5),
+    ncol = 1, rel_heights = c(1, 1, 1, 1)
+)
+
+grid_with_right <- cowplot::plot_grid(
+    grid_3x4, season_labels,
+    ncol = 2,
+    rel_widths = c(1, 0.06)
+)
+
+final_plot <- cowplot::plot_grid(
+    col_titles,
+    grid_with_right,
+    legend_grob,
+    ncol = 1,
+    rel_heights = c(0.06, 1, 0.10)
+)
+
+
+ggsave("BF_Anomalies_Dry_Normal_Wet_3x4WO.png", final_plot,
+       width = 28, height = 16, dpi = 400, bg = "white")
+# ggsave("BF_Anomalies_Dry_Normal_Wet_3x4.pdf", final_plot, width = 28, height = 22)
+```
+
+
